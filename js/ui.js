@@ -209,7 +209,7 @@
     });
     if (ex) drawMinimap();
     if (npcId) { const q = World.projectNPC(npcId), b = $('#npc-bubble');
-      if (q && q.visible) { const w = innerWidth, x = Math.max(150, Math.min(w - 150, q.x)), y = Math.max(140, q.y); b.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`; b.style.opacity = 1; }
+      if (q && q.visible) { const w = innerWidth, hw = Math.min(180, w * .42), x = Math.max(hw, Math.min(w - hw, q.x)), y = Math.max(140, q.y); b.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`; b.style.opacity = 1; }
       else b.style.opacity = 0; }
   }
   const mm = { ctx: null };
@@ -221,8 +221,8 @@
     const P = (wx, wz) => [90 + wx * sc, 90 + wz * sc];
     x.strokeStyle = '#a7aec3'; x.lineWidth = 7 * sc; x.beginPath(); x.arc(90, 90, 34 * sc, 0, 7); x.stroke();
     x.strokeStyle = '#8fcde9'; x.lineWidth = 11 * sc; x.beginPath();
-    [[10, -66], [42, -56], [66, -48], [76, -18], [74, 16], [66, 46], [38, 62], [0, 66], [-38, 62], [-72, 58], [-120, 64]].forEach((p, i) => { const [a, b] = P(...p); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke();
-    x.fillStyle = '#b6d7a0'; x.beginPath(); x.arc(...P(0, -94), 34 * sc, 0, 7); x.fill();
+    [[16, -60], [44, -56], [66, -48], [76, -18], [74, 16], [66, 46], [38, 62], [0, 66], [-38, 62], [-72, 58], [-120, 64]].forEach((p, i) => { const [a, b] = P(...p); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke();
+    x.fillStyle = '#9fcf8a'; x.beginPath(); x.arc(...P(0, -96), 42 * sc, 0, 7); x.fill();
     ZONES.forEach(z => { const [a, b] = P(...z.pos); x.fillStyle = z.color; x.beginPath(); x.arc(a, b, z.id === 'hub' ? 7 : 6, 0, 7); x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 2; x.stroke(); });
     const pp = World.playerPos, yaw = World.playerYaw; const [px, py] = P(pp.x, pp.z);
     x.translate(px, py); x.rotate(-yaw); x.fillStyle = '#24304f'; x.beginPath(); x.moveTo(0, -9); x.lineTo(6, 6); x.lineTo(0, 3); x.lineTo(-6, 6); x.fill();
@@ -246,6 +246,7 @@
     if (!id) { bub.hidden = true; Sound.stopVoice(); if (near) onProximity(near); else $('#prompt').hidden = true; return; }
     const n = npcData(id);
     $('#npc-name').textContent = n.name; $('#npc-role').textContent = n.role;
+    const av = $('#npc-avatar'); av.hidden = false; av.src = `assets/npc/${n.id}.jpg`;
     bub.style.setProperty('--c', (zone(n.zone) || {}).color || '#4a7fd4');
     bub.hidden = false;
     const gi = Math.random() * n.greet.length | 0; talk(n.greet[gi], n, `${n.id}-g${gi + 1}`);

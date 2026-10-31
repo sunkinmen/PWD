@@ -17,7 +17,7 @@
     hitboxes: [],
     colliders: [],
     zones: {},
-    listeners: { zoneClick: [], proximity: [], frame: [], modeChange: [], npc: [] },
+    listeners: { zoneClick: [], proximity: [], frame: [], modeChange: [], npc: [], splash: [] },
     move: { x: 0, y: 0 },     // 手機搖桿輸入
     keys: {},
     riverSamples: [],
@@ -110,29 +110,79 @@
     t.anisotropy = 4; return t;
   }
 
-  /* ---------- 水面 Shader（流動條紋＋岸邊白浪） ---------- */
+  /* ---------- 水面 Shader：fbm 波紋法線、菲涅耳天空反射、太陽高光、焦散、岸邊白浪、順流紋理 ---------- */
   const waterMats = [];
-  function waterMaterial(base = '#86cfe9', deep = '#5fb3dc') {
+  const WATER_NOISE = `
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+    float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
+      return mix(mix(hash(i),hash(i+vec2(1.,0.)),u.x), mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),u.x), u.y); }
+    float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<4;i++){ v+=a*noise(p); p*=2.03; a*=.5; } return v; }`;
+  const WATER_VS = `
+    varying vec2 vUv; varying vec3 vWorld;
+    #include <fog_pars_vertex>
+    void main(){ vUv = uv; vec4 wp = modelMatrix * vec4(position,1.); vWorld = wp.xyz;
+      vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`;
+  function waterMaterial(base = '#8fd6ec', deep = '#3f9bd0', o = {}) {
     const m = new T.ShaderMaterial({
-      fog: true,
+      fog: true, transparent: true, depthWrite: false,
       uniforms: T.UniformsUtils.merge([T.UniformsLib.fog, {
-        uTime: { value: 0 }, uBase: { value: new T.Color(base) }, uDeep: { value: new T.Color(deep) }
+        uTime: { value: 0 }, uShallow: { value: new T.Color(base) }, uDeep: { value: new T.Color(deep) },
+        uSky: { value: new T.Color('#dcecfb') }, uSunDir: { value: new V3(.5, .8, .4) },
+        uRadial: { value: o.radial ? 1 : 0 }, uFlow: { value: o.flow ?? 1 }
       }]),
-      vertexShader: `
-        varying vec2 vUv; #include <fog_pars_vertex>
-        void main(){ vUv=uv; vec4 mvPosition=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mvPosition; #include <fog_vertex> }`.replace(/#include <fog_pars_vertex>/, '\n#include <fog_pars_vertex>\n').replace(/#include <fog_vertex>/, '\n#include <fog_vertex>\n'),
+      vertexShader: WATER_VS,
       fragmentShader: `
-        uniform float uTime; uniform vec3 uBase; uniform vec3 uDeep; varying vec2 vUv;
+        uniform float uTime, uRadial, uFlow; uniform vec3 uShallow, uDeep, uSky, uSunDir;
+        varying vec2 vUv; varying vec3 vWorld;
         #include <fog_pars_fragment>
+        ${WATER_NOISE}
         void main(){
-          float edge = smoothstep(0.0,0.14,vUv.x)*smoothstep(1.0,0.86,vUv.x);
-          vec3 col = mix(uBase*1.08, uDeep, edge*0.55);
-          float s = sin((vUv.y*2.2 - uTime*0.9) + sin(vUv.x*9.0+uTime*0.6)*0.8);
-          float stripe = smoothstep(0.93,1.0,s) * edge;
-          col = mix(col, vec3(1.0), stripe*0.55);
-          float foam = 1.0 - smoothstep(0.0,0.06,min(vUv.x,1.0-vUv.x));
-          col = mix(col, vec3(1.0), foam*0.75);
-          gl_FragColor = vec4(col,1.0);
+          float edge = uRadial > .5 ? .5 - length(vUv - .5) : min(vUv.x, 1. - vUv.x);
+          vec2 q = uRadial > .5 ? vWorld.xz*.35 + vec2(uTime*.05, uTime*.03) : vec2(vUv.x*2.5, vUv.y*.8 - uTime*.35*uFlow);
+          float e = .04;
+          float h0 = fbm(q*2.), hx = fbm(q*2. + vec2(e,0.)), hy = fbm(q*2. + vec2(0.,e));
+          float h1 = fbm(vWorld.xz*.6 + vec2(-uTime*.12, uTime*.09));
+          vec3 N = normalize(vec3((h0-hx)*9. + (h1-.5)*.3, 1., (h0-hy)*9.));
+          vec3 V = normalize(cameraPosition - vWorld);
+          float fres = pow(1. - clamp(dot(N, V), 0., 1.), 4.);
+          float depth = smoothstep(0., .32, edge);
+          vec3 col = mix(uShallow, uDeep, depth);
+          col = mix(col, uSky, .16 + fres*.6);
+          vec3 H = normalize(normalize(uSunDir) + V);
+          col += pow(max(dot(N, H), 0.), 160.) * 1.3;
+          col += smoothstep(.72, .78, fbm(q*6. + uTime*.4)) * .2 * depth;
+          col += smoothstep(.5, .56, fbm(vWorld.xz*.9 + uTime*.15)) * (1. - depth) * .14;
+          float fn = fbm(vec2(vUv.y*6. - uTime*.8*uFlow, vUv.x*14.) + vWorld.xz*.2);
+          float foam = 1. - smoothstep(0., .06 + fn*.06, edge);
+          col = mix(col, vec3(1.), foam*.88);
+          float streak = smoothstep(.64, .7, fbm(vec2(vUv.x*5., vUv.y*1.4 - uTime*.6*uFlow))) * (1. - uRadial);
+          col = mix(col, vec3(.96,.99,1.), streak*.28*depth);
+          gl_FragColor = vec4(col, clamp(mix(.74, .96, depth) + foam*.2, 0., 1.));
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }`
+    });
+    waterMats.push(m); return m;
+  }
+  // 瀑布：往下流的水絲＋底部白沫
+  function fallMaterial() {
+    const m = new T.ShaderMaterial({
+      fog: true, transparent: true, depthWrite: false, side: T.DoubleSide,
+      uniforms: T.UniformsUtils.merge([T.UniformsLib.fog, { uTime: { value: 0 } }]),
+      vertexShader: WATER_VS,
+      fragmentShader: `
+        uniform float uTime; varying vec2 vUv; varying vec3 vWorld;
+        #include <fog_pars_fragment>
+        ${WATER_NOISE}
+        void main(){
+          float s = fbm(vec2(vUv.x*9., vUv.y*2. + uTime*1.8));
+          vec3 col = mix(vec3(.62,.86,.96), vec3(1.), smoothstep(.45,.75,s));
+          float side = smoothstep(0.,.18,vUv.x)*smoothstep(1.,.82,vUv.x);
+          float foam = smoothstep(.25,0.,vUv.y);
+          col = mix(col, vec3(1.), foam);
+          gl_FragColor = vec4(col, side*(.75 + .25*s));
           #include <colorspace_fragment>
           #include <fog_fragment>
         }`
@@ -360,14 +410,75 @@
    * ===================================================================== */
   const RIVER_W = 11;
   function buildRiver() {
-    const pts = [[10, -66], [24, -60], [42, -56], [66, -48], [76, -18], [74, 16], [66, 46], [38, 62], [0, 66], [-38, 62], [-72, 58], [-120, 64]]
+    const pts = [[16, -60], [28, -58], [44, -56], [66, -48], [76, -18], [74, 16], [66, 46], [38, 62], [0, 66], [-38, 62], [-72, 58], [-120, 64]]
       .map(([x, z]) => new V3(x, 0, z));
     const river = W.river = new T.CatmullRomCurve3(pts);
-    const bank = new T.Mesh(ribbon(river, RIVER_W + 7, 220, () => 0.07), toon('#ece0c4'));
+    const bank = new T.Mesh(ribbon(river, RIVER_W + 7, 220, () => 0.07), toon('#e9dcc0'));
     bank.receiveShadow = true; W.scene.add(bank);
-    const water = new T.Mesh(ribbon(river, RIVER_W, 220, () => 0.2, 1), waterMaterial());
-    W.scene.add(water);
+    const bed = new T.Mesh(ribbon(river, RIVER_W, 220, () => 0.1), toon('#7fb9a8'));   // 河床（透出淺色）
+    W.scene.add(bed);
+    const water = new T.Mesh(ribbon(river, RIVER_W, 260, () => 0.22, 1), waterMaterial('#9fdcec', '#3e98cc'));
+    water.renderOrder = 1; W.scene.add(water);
     for (let i = 0; i <= 300; i++) W.riverSamples.push(river.getPointAt(i / 300));
+    buildFish();
+  }
+
+  /* ---------- 魚群躍出水面（水花＋音效） ---------- */
+  function fishMesh(col) {
+    const f = G(null);
+    M(sph(.32, 2), col, { s: [.55, .7, 1.5], parent: f, ol: .03 });
+    M(sph(.2, 1), '#f4f8ff', { y: -.08, z: .08, s: [.5, .5, 1.3], parent: f, ol: 0 });
+    const tail = M(new T.ConeGeometry(.3, .45, 4), col, { z: -.62, rx: -Math.PI / 2, s: [.25, 1, 1], parent: f, ol: .02 });
+    M(new T.ConeGeometry(.12, .3, 4), col, { y: .26, z: -.05, s: [.3, 1, 1], parent: f, ol: .02 });
+    [-1, 1].forEach(s => M(sph(.05, 0), '#2c3554', { x: s * .14, y: .06, z: .36, parent: f, ol: 0 }));
+    f.userData.tail = tail; f.visible = false; return f;
+  }
+  function buildFish() {
+    const pool = [], splashes = [];
+    for (let i = 0; i < 6; i++) pool.push(fishMesh(['#9ec9e8', '#f2b48a', '#b9c7d6'][i % 3]));
+    const ringMat = new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: .8, depthWrite: false });
+    const dropGeo = new T.BufferGeometry(), DN = 40, dp = new Float32Array(DN * 3); dropGeo.setAttribute('position', new T.BufferAttribute(dp, 3));
+    function splash(p) {
+      const r = new T.Mesh(new T.RingGeometry(.2, .45, 24), ringMat.clone()); r.rotation.x = -Math.PI / 2; r.position.set(p.x, .26, p.z); W.scene.add(r);
+      const pts = new T.Points(dropGeo.clone(), new T.PointsMaterial({ color: '#f2fbff', size: .28, map: dotTex(), transparent: true, depthWrite: false }));
+      const v = []; const a = pts.geometry.attributes.position.array;
+      for (let i = 0; i < DN; i++) { a[i * 3] = p.x; a[i * 3 + 1] = .3; a[i * 3 + 2] = p.z; v.push([rnd(-1.6, 1.6), rnd(2.5, 5), rnd(-1.6, 1.6)]); }
+      W.scene.add(pts); splashes.push({ r, pts, v, t: 0 });
+      W.listeners.splash.forEach(f => f(p));
+    }
+    let next = 2;
+    const jumps = [];
+    W.updaters.push((t, dt) => {
+      next -= dt;
+      if (next <= 0) {
+        next = rnd(2.5, 6);
+        const u = rnd(.08, .95), c = W.river.getPointAt(u), tan = W.river.getTangentAt(u), n = new V3(-tan.z, 0, tan.x);
+        const count = 1 + (Math.random() * 3 | 0);
+        for (let k = 0; k < count; k++) {
+          const f = pool.find(x => !x.visible); if (!f) break;
+          const off = rnd(-3, 3), dir = Math.random() < .5 ? 1 : -1;
+          const start = c.clone().addScaledVector(n, off).addScaledVector(tan, k * 1.2);
+          jumps.push({ f, start, dir: tan.clone().multiplyScalar(dir), t: -k * .18, dur: rnd(.9, 1.2), h: rnd(1.6, 2.6), len: rnd(2.5, 3.8), s0: false, s1: false });
+        }
+      }
+      for (let i = jumps.length - 1; i >= 0; i--) {
+        const j = jumps[i]; j.t += dt; if (j.t < 0) continue;
+        const k = j.t / j.dur; j.f.visible = k < 1;
+        if (!j.s0) { j.s0 = true; splash(j.start); }
+        const p = j.start.clone().addScaledVector(j.dir, j.len * k); p.y = .2 + 4 * j.h * k * (1 - k);
+        j.f.position.copy(p); j.f.rotation.set(-(1 - 2 * k) * 1.1, Math.atan2(j.dir.x, j.dir.z), 0, 'YXZ');
+        j.f.userData.tail.rotation.y = Math.sin(t * 30) * .5;
+        if (k >= 1) { if (!j.s1) splash(p.setY(.2)); jumps.splice(i, 1); }
+      }
+      for (let i = splashes.length - 1; i >= 0; i--) {
+        const s = splashes[i]; s.t += dt;
+        s.r.scale.setScalar(1 + s.t * 5); s.r.material.opacity = Math.max(0, .8 - s.t * .8);
+        const a = s.pts.geometry.attributes.position.array;
+        s.v.forEach((v, k) => { v[1] -= 12 * dt; a[k * 3] += v[0] * dt; a[k * 3 + 1] = Math.max(.2, a[k * 3 + 1] + v[1] * dt); a[k * 3 + 2] += v[2] * dt; });
+        s.pts.geometry.attributes.position.needsUpdate = true; s.pts.material.opacity = Math.max(0, 1 - s.t * 1.2);
+        if (s.t > 1.1) { W.scene.remove(s.r, s.pts); s.r.geometry.dispose(); s.pts.geometry.dispose(); splashes.splice(i, 1); }
+      }
+    });
   }
 
   /* =====================================================================
@@ -571,31 +682,106 @@
   /* =====================================================================
    * 水利工程處：抽水站＋疏散門＋河濱自行車＋渡船
    * ===================================================================== */
+  /* ---------- 文字貼圖（招牌） ---------- */
+  function textTex(w, h, draw) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); draw(x, w, h);
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8;
+    if (document.fonts) document.fonts.ready.then(() => { x.clearRect(0, 0, w, h); draw(x, w, h); t.needsUpdate = true; });
+    return t;
+  }
+  const FONT_TC = '"Noto Sans TC","Microsoft JhengHei",sans-serif';
+  // 選用貼圖：assets/tex/ 有圖就用（Nano Banana 生成），沒有就用程式繪製
+  function optTex(url, fallback, onload) {
+    const t = fallback;
+    new T.TextureLoader().load(url, img => { img.colorSpace = T.SRGBColorSpace; img.anisotropy = 8; img.wrapS = t.wrapS; img.wrapT = t.wrapT; img.repeat.copy(t.repeat); onload(img); }, undefined, () => {});
+    return t;
+  }
+
+  /* =====================================================================
+   * 水利工程處：抽水站（仿實體造型）＋堤防彩繪牆＋疏散門＋河濱自行車＋渡船
+   * ===================================================================== */
   function buildHEO() {
     const [zx, zz] = zoneById('heo').pos;
     const g = W.zones.heo = G(null, zx, 0, zz);
-    // 抽水站
-    const st = G(g, 6, 0, -6); st.rotation.y = -0.5;
-    M(box(9, 5.5, 7), '#f7f4ee', { y: 2.75, parent: st });
-    M(box(9.8, .9, 7.8), '#6fb6e0', { y: 5.9, parent: st });
-    M(box(3, 2, .3), '#bfe3f7', { y: 3.6, z: 3.6, parent: st, ol: .05 });
-    // 出水管
-    [-2.5, 0, 2.5].forEach(x => M(cyl(.6, .6, 6, 14), '#9fc9e8', { x, y: 1, z: -5.5, rx: Math.PI / 2 - .25, parent: st, ol: .06 }));
-    // 風扇（旋轉）
-    const fan = G(st, 4.6, 3.4, 0);
-    M(cyl(1.4, 1.4, .3, 24), '#ffffff', { rz: Math.PI / 2, parent: fan, ol: .05 });
-    const blades = G(fan, .25, 0, 0);
-    for (let i = 0; i < 4; i++) { const b = M(box(.1, 2.2, .45), '#6fb6e0', { parent: blades, ol: 0 }); b.rotation.x = i * Math.PI / 4; }
-    W.updaters.push((t, dt) => { blades.rotation.x += dt * 6; });
-    W.colliders.push({ x: zx + 6, z: zz - 6, r: 6.5 });
-    // 堤防＋疏散門
-    const lv = G(g, -6, 0, 7); lv.rotation.y = .2;
-    M(box(12, 2.4, 1.2), '#e9e4da', { y: 1.2, parent: lv });
-    M(box(3.6, .5, 1.6), '#6fb6e0', { y: 2.6, parent: lv, ol: .05 });
-    const gate = M(box(3, 2.2, .5), '#ffd166', { y: 1.1, z: .4, parent: lv, ol: .06 });
-    W.updaters.push(t => { gate.position.y = 1.1 + (Math.sin(t * .4) > .6 ? 2 : 0) * Math.min(1, (Math.sin(t * .4) - .6) * 6); });
-    // 向日葵花圃
-    for (let i = 0; i < 18; i++) flower(g, rnd(-10, 2), rnd(-12, -4), '#ffd166', 1.2);
+    // ── 抽水站：主機房＋出水閘箱＋變電室 ──
+    const st = G(null, 60, 0, 15); st.rotation.y = -Math.PI / 2 + .12;     // 正面朝市區、出水口朝河
+    const concrete = '#eef0f2', blue = '#5f9fd6';
+    // 主機房
+    M(box(15, 7.5, 8), concrete, { y: 3.75, parent: st });
+    // 立面垂直遮陽板＋帶狀玻璃
+    for (let i = -6; i <= 6; i++) M(box(.35, 6.2, .5), '#dfe4ea', { x: i * 1.1, y: 3.6, z: 4.15, parent: st, ol: .02 });
+    M(box(14.2, 1.6, .2), '#9fcbe8', { y: 4.6, z: 4.02, parent: st, ol: 0 });
+    M(box(14.2, 1.1, .2), '#9fcbe8', { y: 2.2, z: 4.02, parent: st, ol: 0 });
+    // 頂部藍色飾帶＋招牌
+    M(box(15.6, 1.4, 8.6), blue, { y: 8.1, parent: st, ol: .06 });
+    const signT = textTex(1024, 160, (x, w, h) => { x.fillStyle = '#5f9fd6'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `900 78px ${FONT_TC}`; x.fillText('河 濱 抽 水 站', w / 2, 62);
+      x.font = `700 30px Outfit, ${FONT_TC}`; x.fillText('TAIPEI PUBLIC WORKS · PUMPING STATION', w / 2, 128); });
+    const sign = new T.Mesh(new T.PlaneGeometry(13, 2.03), new T.MeshBasicMaterial({ map: signT })); sign.position.set(0, 8.1, 4.32); st.add(sign);
+    // 入口雨庇與大門
+    M(box(5, .3, 2), '#ffffff', { y: 3.1, z: 5, parent: st, ol: .04 });
+    M(box(3.4, 2.9, .2), '#4b5d78', { y: 1.45, z: 4.12, parent: st, ol: .02 });
+    const plate = textTex(512, 128, (x, w, h) => { x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h); x.fillStyle = '#2c3554'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `700 40px ${FONT_TC}`; x.fillText('臺北市政府工務局水利工程處', w / 2, 64); });
+    const pl = new T.Mesh(new T.PlaneGeometry(4, 1), new T.MeshBasicMaterial({ map: plate })); pl.position.set(0, 3.7, 6.02); st.add(pl);
+    // 屋頂設備
+    [[-5, -2], [-2, -2], [3, -1]].forEach(([x, z]) => { M(box(2, 1, 2), '#d6dbe3', { x, y: 9.3, z, parent: st, ol: .03 });
+      const fan = M(cyl(.7, .7, .1, 16), '#9aa3b5', { x, y: 9.85, z, parent: st, ol: 0 }); W.updaters.push((t, dt) => { fan.rotation.y += dt * 4; }); });
+    M(cyl(.06, .06, 4, 6), '#9aa3b5', { x: 6, y: 10.8, z: 2, parent: st, ol: .02 });
+    // 出水閘箱（往河側）＋四孔閘門＋出水水流
+    const out = G(st, 0, 0, -6.5);
+    M(box(13, 4.2, 5), '#e2e5e9', { y: 2.1, parent: out });
+    M(box(13.4, .5, 5.4), blue, { y: 4.4, parent: out, ol: .04 });
+    W.pumpJets = [];
+    for (let i = 0; i < 4; i++) {
+      const x = -4.5 + i * 3;
+      M(box(2.2, 1.8, .3), '#38455e', { x, y: 1.3, z: -2.55, parent: out, ol: .02 });
+      M(box(2.5, .25, .4), '#ffd166', { x, y: 3.6, z: -2.55, parent: out, ol: .02 });          // 閘門吊架
+      [-1.15, 1.15].forEach(dx => M(box(.2, 3.4, .4), '#ffd166', { x: x + dx, y: 1.9, z: -2.55, parent: out, ol: .02 }));
+      const jet = new T.Mesh(new T.PlaneGeometry(1.8, 3.2, 1, 1), fallMaterial());
+      jet.position.set(x, .7, -3.6); jet.rotation.x = -1.15; out.add(jet); W.pumpJets.push(jet);
+    }
+    // 變電室
+    M(box(4, 3, 4), '#f6f3ee', { x: -10.5, y: 1.5, z: 1, parent: st });
+    M(box(4.4, .4, 4.4), blue, { x: -10.5, y: 3.2, z: 1, parent: st, ol: .03 });
+    W.colliders.push({ x: 60, z: 15, r: 9 }, { x: 60, z: 4.5, r: 5 }, { x: 60, z: 25.5, r: 5 });
+
+    // ── 堤防彩繪牆＋疏散門 ──
+    const LX = 59.5, LZ = 36, LR = -.42; const lv = G(null, LX, 0, LZ); lv.rotation.y = LR;
+    const muralFallback = textTex(2048, 256, (x, w, h) => {
+      const gr = x.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#cfe8f7'); gr.addColorStop(1, '#eaf6ff'); x.fillStyle = gr; x.fillRect(0, 0, w, h);
+      for (let i = 0; i < 3; i++) { x.fillStyle = ['#9fd3ea', '#7fc0e3', '#5fa9d8'][i]; x.beginPath(); x.moveTo(0, h);
+        for (let k = 0; k <= w; k += 16) x.lineTo(k, h * (.55 + i * .13) + Math.sin(k / (90 - i * 20) + i) * 14); x.lineTo(w, h); x.fill(); }
+      const fish = (cx, cy, s, c) => { x.fillStyle = c; x.beginPath(); x.ellipse(cx, cy, 34 * s, 16 * s, 0, 0, 7); x.fill(); x.beginPath(); x.moveTo(cx - 30 * s, cy); x.lineTo(cx - 54 * s, cy - 16 * s); x.lineTo(cx - 54 * s, cy + 16 * s); x.fill(); x.fillStyle = '#fff'; x.beginPath(); x.arc(cx + 18 * s, cy - 4 * s, 4 * s, 0, 7); x.fill(); };
+      for (let i = 0; i < 14; i++) fish(100 + i * 140, 150 + Math.sin(i) * 40, .9 + (i % 3) * .2, ['#ffb38a', '#ffd166', '#ff9fb6', '#ffffff'][i % 4]);
+      x.fillStyle = '#2c3554'; x.font = `900 46px ${FONT_TC}`; x.fillText('愛河護水・臺北水岸', 60, 70);
+    });
+    const muralMat = new T.MeshToonMaterial({ map: muralFallback, gradientMap: gradMap });
+    optTex('assets/tex/levee-mural.jpg', muralFallback, t => { muralMat.map = t; muralMat.needsUpdate = true; });
+    const L = 24, gap = 4.6;
+    [-1, 1].forEach(s => {
+      const len = (L - gap) / 2, w = M(box(1.4, 3.4, len), '#e6e2da', { y: 1.7, z: s * (gap / 2 + len / 2), parent: lv });
+      const mural = new T.Mesh(new T.PlaneGeometry(len, 3), muralMat); mural.position.set(-.72, 1.7, s * (gap / 2 + len / 2)); mural.rotation.y = -Math.PI / 2;
+      if (s > 0) { mural.material = muralMat; } lv.add(mural);
+      M(box(1.8, .35, len), '#d0cbc0', { y: 3.55, z: s * (gap / 2 + len / 2), parent: lv, ol: .03 });
+    });
+    // 疏散門：黃黑斜紋滑動門＋門楣號碼＋警示燈
+    const stripe = textTex(256, 256, (x) => { x.fillStyle = '#ffd166'; x.fillRect(0, 0, 256, 256); x.fillStyle = '#2c3554';
+      for (let i = -256; i < 512; i += 64) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 32, 0); x.lineTo(i + 32 - 256, 256); x.lineTo(i - 256, 256); x.fill(); } });
+    const gate = M(box(.6, 3.2, gap + .4), null, { y: 1.6, x: -.2, parent: lv, mat: new T.MeshToonMaterial({ map: stripe, gradientMap: gradMap }) });
+    M(box(1.8, 1.2, gap + 1.2), '#5f9fd6', { y: 4.4, parent: lv, ol: .04 });
+    const gNo = textTex(512, 128, (x, w, h) => { x.fillStyle = '#5f9fd6'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `900 64px ${FONT_TC}`; x.fillText('疏散門  7 號', w / 2, 66); });
+    const gs = new T.Mesh(new T.PlaneGeometry(gap + 1, 1.1), new T.MeshBasicMaterial({ map: gNo })); gs.position.set(-.92, 4.4, 0); gs.rotation.y = -Math.PI / 2; lv.add(gs);
+    const lamps = [-1, 1].map(s => M(sph(.22, 1), '#ff9e5e', { x: -.95, y: 5.2, z: s * (gap / 2 + .3), parent: lv, ol: .02, mat: new T.MeshBasicMaterial({ color: '#ffb38a' }) }));
+    M(box(.3, .3, gap + 6), '#9aa3b5', { y: .15, x: -.2, parent: lv, ol: 0 });                       // 軌道
+    W.updaters.push(t => { const c = (t % 24) / 24, closing = c > .55 && c < .95, k = c < .55 ? 0 : c < .65 ? (c - .55) / .1 : c < .85 ? 1 : 1 - (c - .85) / .1;
+      gate.position.z = (1 - k) * (gap + .6); lamps.forEach((l, i) => (l.visible = closing && ((t * 4 + i) | 0) % 2 === 0)); });
+    W.colliders.push({ x: LX, z: LZ, r: 2 });
+    for (let k = -12; k <= 12; k += 3) if (Math.abs(k) > 3) W.colliders.push({ x: LX + Math.sin(LR) * k, z: LZ + Math.cos(LR) * k, r: 1.6 });
+    // 河濱花圃（向日葵）
+    for (let i = 0; i < 18; i++) flower(g, rnd(-10, 0), rnd(-14, -6), '#ffd166', 1.2);
 
     // 河濱自行車（YouBike 風格）
     W.bikes = [];
@@ -734,12 +920,14 @@
     (window.NPCS || []).forEach((n, i) => {
       let pos, obj = null, radius = 6.5;
       if (n.outfit === 'turtle') { const [zx, zz] = zoneById('sso').pos; pos = new V3(zx - 3, 1.6, zz + 6); radius = 7; }
-      else if (n.outfit === 'god') { pos = new V3(0, 19, -69.5); radius = 15; }
+      else if (n.outfit === 'god') { pos = new V3(0, 30, -96); radius = 15; }
       else {
         let x, z;
         if (n.zone === 'hub') { x = 7; z = 21; }
-        else { const [zx, zz] = zoneById(n.zone).pos, L = Math.hypot(zx, zz), ux = zx / L, uz = zz / L; x = zx - ux * 10 + uz * 3.6; z = zz - uz * 10 - ux * 3.6; }
-        obj = makeNPC(n.outfit); obj.position.set(x, .1, z); obj.rotation.y = Math.atan2(-x, -z) + Math.PI;
+        else { const [zx, zz] = zoneById(n.zone).pos, L = Math.hypot(zx, zz), ux = zx / L, uz = zz / L;
+          const cands = [[1, 10], [-1, 10], [1, 13], [-1, 13], [0, 14]].map(([s, d]) => [zx - ux * d + uz * 3.6 * s, zz - uz * d - ux * 3.6 * s]);
+          [x, z] = cands.find(c => !W.colliders.some(k => Math.hypot(c[0] - k.x, c[1] - k.z) < k.r + 1.4)) || cands[4]; }
+        obj = makeNPC(n.outfit); obj.position.set(x, .1 + hill(x, z), z); obj.rotation.y = Math.atan2(-x, -z) + Math.PI;
         pos = new V3(x, 0, z);
         W.colliders.push({ x, z, r: .7 });
       }
@@ -747,7 +935,7 @@
       W.npcs.push(npc);
       if (obj) W.updaters.push((t, dt) => {
         const u = obj.userData, near = W.mode === 'explore' && W._npc === n.id;
-        obj.position.y = .1 + Math.abs(Math.sin(t * 2 + npc.ph)) * .02;
+        obj.position.y = .1 + hill(obj.position.x, obj.position.z) + Math.abs(Math.sin(t * 2 + npc.ph)) * .02;
         u.head.rotation.y = Math.sin(t * .7 + npc.ph) * .3;
         const goalYaw = near ? Math.atan2(cam.pos.x - obj.position.x, cam.pos.z - obj.position.z) : obj.userData.baseYaw ?? (obj.userData.baseYaw = obj.rotation.y);
         obj.rotation.y += (nearestAngle(obj.rotation.y, goalYaw) - obj.rotation.y) * Math.min(1, dt * 4);
@@ -815,42 +1003,123 @@
   function buildPKL() {
     const [zx, zz] = zoneById('pkl').pos;
     const g = W.zones.pkl = G(null, zx, 0, zz);
-    const lawn = new T.Mesh(new T.CircleGeometry(20, 48), toon('#bfe3a3'));
+    g.rotation.y = Math.atan2(-zx, -zz);                     // 區內 +z 朝向局本部（公園入口）
+    const W2 = (x, z) => g.localToWorld(new V3(x, 0, z));
+    g.updateMatrixWorld(true);
+    // 草坪＋外圈林蔭步道
+    const lawn = new T.Mesh(new T.CircleGeometry(22, 64), toon('#b9e0a0'));
     lawn.rotation.x = -Math.PI / 2; lawn.position.y = .05; lawn.receiveShadow = true; g.add(lawn);
-    // 噴泉
-    const f = G(g, -4, 0, -4);
-    M(cyl(3.2, 3.4, .8, 28), '#f3ece0', { y: .4, parent: f });
-    const pool = new T.Mesh(new T.CircleGeometry(2.8, 28), waterMaterial('#9fdcf0', '#7cc7e6'));
-    pool.rotation.x = -Math.PI / 2; pool.position.y = .82; f.add(pool);
-    M(cyl(.4, .6, 2, 12), '#f3ece0', { y: 1.4, parent: f, ol: .06 });
-    const dropN = 60, dg = new T.BufferGeometry(), dp = new Float32Array(dropN * 3), dv = [];
-    for (let i = 0; i < dropN; i++) dv.push({ a: rnd(0, 6.28), s: rnd(.6, 1.2), o: rnd(0, 1) });
-    dg.setAttribute('position', new T.BufferAttribute(dp, 3));
-    const drops = new T.Points(dg, new T.PointsMaterial({ color: '#e8f7ff', size: .45, map: dotTex(), transparent: true, alphaTest: .3, depthWrite: false }));
-    f.add(drops);
-    W.updaters.push(t => {
-      for (let i = 0; i < dropN; i++) { const d = dv[i], u = (t * .7 * d.s + d.o) % 1;
-        dp[i * 3] = Math.cos(d.a) * u * 2.2; dp[i * 3 + 2] = Math.sin(d.a) * u * 2.2; dp[i * 3 + 1] = 2.4 + u * 4 * (1 - u) * 3.2 - u * 1.4; }
-      dg.attributes.position.needsUpdate = true;
+    const ring = new T.Mesh(new T.RingGeometry(15.6, 17.4, 64), toon('#eadfc8'));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = .07; ring.receiveShadow = true; g.add(ring);
+    const axis = new T.Mesh(new T.PlaneGeometry(2.6, 16), toon('#eadfc8')); axis.rotation.x = -Math.PI / 2; axis.position.set(0, .07, 9); g.add(axis);
+    // 入口意象牆「大安森林公園」
+    const gate = G(g, 0, 0, 18.8);
+    [-1, 1].forEach(s => { M(box(3.2, 1.6, .8), '#e9e1d2', { x: s * 3.4, y: .8, parent: gate, ol: .04 }); M(box(3.4, .25, 1), '#7fbf88', { x: s * 3.4, y: 1.7, parent: gate, ol: .03 }); });
+    const gt = textTex(512, 96, (x, w, h) => { x.fillStyle = '#e9e1d2'; x.fillRect(0, 0, w, h); x.fillStyle = '#3f6e4c'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `900 52px ${FONT_TC}`; x.fillText('大安森林公園', w / 2, h / 2); });
+    const gs = new T.Mesh(new T.PlaneGeometry(3, .56), new T.MeshBasicMaterial({ map: gt })); gs.position.set(3.4, 1, .41); gate.add(gs);
+    const gs2 = gs.clone(); gs2.position.x = -3.4; gate.add(gs2);
+
+    // ── 露天音樂台（白色貝殼弧頂）──
+    const stage = G(g, 0, 0, -11);
+    M(cyl(5.2, 5.4, .7, 40), '#e6e2da', { y: .35, parent: stage }); M(box(10.4, .7, 2.2), '#e6e2da', { y: .35, z: -1, parent: stage, ol: .04 });
+    const shell = new T.Mesh(new T.SphereGeometry(7, 40, 20, -Math.PI / 2, Math.PI, 0, Math.PI / 2), toon('#ffffff', { side: T.DoubleSide }));
+    shell.scale.set(.85, .85, .7); shell.position.set(0, .7, -1.2); shell.rotation.y = -Math.PI / 2; shell.castShadow = true; stage.add(shell); outline(shell, .14);
+    for (let i = 1; i < 6; i++) { const rib = new T.Mesh(new T.TorusGeometry(5.98, .08, 6, 32, Math.PI / 2), toon('#e6edf5'));
+      const piv = G(stage, 0, .7, -1.2); piv.scale.set(.85, .85, .7); piv.rotation.y = Math.PI / 2 + (i / 6) * Math.PI; rib.rotation.y = Math.PI / 2; piv.add(rib); }
+    const arch = new T.Mesh(new T.TorusGeometry(5.95, .28, 10, 48, Math.PI), toon('#cfe3f5')); arch.position.set(0, .7, -1.2); arch.scale.set(.85, .85, 1); stage.add(arch); outline(arch, .05);
+    const inner = new T.Mesh(new T.SphereGeometry(5.9, 32, 16, -Math.PI / 2, Math.PI, 0, Math.PI / 2), toon('#dcebfa', { side: T.BackSide })); inner.scale.set(.85, .85, .7); inner.position.set(0, .7, -1.25); inner.rotation.y = -Math.PI / 2; stage.add(inner);
+    [-2.5, 0, 2.5].forEach(x => M(cyl(.08, .08, 1.3, 8), '#5e6a8a', { x, y: 1.35, z: 1.4, parent: stage, ol: .02 }));
+    W.colliders.push(Object.assign({ r: 7.2 }, (p => ({ x: p.x, z: p.z }))(W2(0, -11.6))));
+
+    // ── 生態池：水面、蘆葦、荷葉、木棧橋、白鷺鷥 ──
+    const pond = G(g, -10, 0, -1);
+    const pw = new T.Mesh(new T.CircleGeometry(5.6, 40), waterMaterial('#a6e0d6', '#4fa7b8', { radial: true }));
+    pw.rotation.x = -Math.PI / 2; pw.position.y = .14; pw.scale.set(1, 1.35, 1); pw.renderOrder = 1; pond.add(pw);
+    const rim = new T.Mesh(new T.RingGeometry(5.5, 6.2, 40), toon('#c9bfa8')); rim.rotation.x = -Math.PI / 2; rim.position.y = .1; rim.scale.set(1, 1.35, 1); pond.add(rim);
+    for (let i = 0; i < 30; i++) { const a = rnd(0, 6.28), r = rnd(4.6, 5.6); const reed = G(pond, Math.cos(a) * r, 0, Math.sin(a) * r * 1.35);
+      M(cyl(.03, .05, rnd(1.2, 2), 4), '#7fb36a', { y: .8, rz: rnd(-.15, .15), parent: reed, ol: 0, cast: false });
+      W.updaters.push(t => { reed.rotation.z = Math.sin(t * 1.6 + a * 3) * .08; }); }
+    for (let i = 0; i < 9; i++) { const a = rnd(0, 6.28), r = rnd(1, 3.8);
+      M(cyl(rnd(.35, .6), rnd(.35, .6), .04, 12), '#79b866', { x: Math.cos(a) * r, y: .2, z: Math.sin(a) * r * 1.35, parent: pond, ol: .02, cast: false });
+      if (i % 3 === 0) M(sph(.18, 1), '#ffb3c8', { x: Math.cos(a) * r, y: .38, z: Math.sin(a) * r * 1.35, parent: pond, ol: .02 }); }
+    const bridge = G(pond, 0, 0, 0); bridge.rotation.y = .3;
+    M(box(1.6, .2, 9), '#c99b77', { y: .55, parent: bridge, ol: .04 });
+    for (let k = -4; k <= 4; k += 2) [-1, 1].forEach(s => M(cyl(.07, .07, .9, 6), '#a8794f', { x: s * .78, y: .95, z: k, parent: bridge, ol: .02 }));
+    [-1, 1].forEach(s => M(box(.08, .08, 9), '#a8794f', { x: s * .78, y: 1.38, parent: bridge, ol: 0 }));
+    [[-2.5, 3], [2.3, -3.6], [3.2, 2.4]].forEach(([x, z], i) => {
+      const eg = egret(); eg.position.set(x, .15, z); eg.rotation.y = rnd(0, 6.28); pond.add(eg);
+      W.updaters.push(t => { const k = (t * .5 + i * 1.7) % 6; eg.userData.neck.rotation.x = k < .6 ? Math.sin(k / .6 * Math.PI) * 1.1 : 0; });
     });
-    W.colliders.push({ x: zx - 4, z: zz - 4, r: 3.6 });
-    // 樹木環繞
-    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2 + .2; tree(g, Math.cos(a) * 15 + rnd(-1, 1), Math.sin(a) * 15 + rnd(-1, 1), rnd(.9, 1.3), i % 3 === 0 ? 0 : (i % 3)); }
-    // 花圃
-    const cols = ['#ff9fb6', '#ffd166', '#c6a8ff', '#ffffff', '#ffb38a'];
-    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + .8;
-      for (let i = 0; i < 14; i++) flower(g, Math.cos(a) * 8 + rnd(-1.6, 1.6), Math.sin(a) * 8 + rnd(-1.6, 1.6), cols[(k + i) % 5], rnd(.4, .8)); }
-    // 長椅
-    [[5, 4, .6], [-9, 5, -.4]].forEach(([x, z, r]) => { const b = G(g, x, 0, z); b.rotation.y = r;
-      M(box(2.4, .2, .7), '#c99b77', { y: .7, parent: b, ol: .05 }); M(box(2.4, .7, .15), '#c99b77', { y: 1.1, z: -.35, parent: b, ol: .05 });
-      [-1, 1].forEach(s => M(box(.15, .7, .6), '#5e6a8a', { x: s, y: .35, parent: b, ol: .03 })); });
-    // 共融遊戲場（溜滑梯）
-    const pg = G(g, 7, 0, -6); pg.rotation.y = -.6;
-    M(box(2.4, 3, 2.4), '#ffd166', { y: 1.5, parent: pg });
-    M(box(2.6, .3, 2.6), '#ff9fb6', { y: 3.1, parent: pg, ol: .05 });
-    M(box(1.4, .2, 5), '#8fd1f0', { y: 1.6, z: 3.2, rx: .55, parent: pg, ol: .05 });
-    // 路燈
-    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; streetLight(g, Math.cos(a) * 11, Math.sin(a) * 11); }
+    W.colliders.push(Object.assign({ r: 5.5 }, (p => ({ x: p.x, z: p.z }))(W2(-10, -1))));
+
+    // ── 共融遊戲場：軟墊、溜滑梯塔、鞦韆、蹺蹺板、攀爬網、搖搖馬 ──
+    const pg = G(g, 10, 0, -1); pg.rotation.y = -Math.PI / 2;
+    const mat = new T.Mesh(new T.CircleGeometry(7, 40), toon('#f7b9a8')); mat.rotation.x = -Math.PI / 2; mat.position.y = .1; mat.receiveShadow = true; pg.add(mat);
+    [[2.4, 2, '#a8dcf0'], [-2.6, 1.6, '#ffe08a'], [0, -3, '#b9e6b0']].forEach(([x, z, c]) => { const d = new T.Mesh(new T.CircleGeometry(2, 28), toon(c)); d.rotation.x = -Math.PI / 2; d.position.set(x, .11, z); pg.add(d); });
+    // 溜滑梯塔
+    const tw = G(pg, -2.5, 0, -2.5);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([x, z]) => M(cyl(.12, .12, 3.4, 8), '#5f9fd6', { x, y: 1.7, z, parent: tw, ol: .02 }));
+    M(box(2.3, .25, 2.3), '#ffd166', { y: 1.9, parent: tw, ol: .03 });
+    M(new T.ConeGeometry(1.9, 1.3, 4), '#ff8f8f', { y: 4.1, ry: Math.PI / 4, parent: tw, ol: .04 });
+    const slideC = new T.CatmullRomCurve3([new V3(1.1, 2, 0), new V3(2.6, 1.4, .4), new V3(3.6, .7, 1.6), new V3(4.2, .3, 3)]);
+    const slide = new T.Mesh(new T.TubeGeometry(slideC, 24, .45, 10, false), toon('#8fd1f0', { side: T.DoubleSide })); slide.scale.set(1, 1, 1); slide.castShadow = true; tw.add(slide); outline(slide, .05);
+    for (let k = 0; k < 5; k++) M(box(1, .08, .3), '#ffffff', { x: -1.1 - .1, y: .35 + k * .38, z: .6 + k * .25, parent: tw, ol: .01 });
+    // 鞦韆（含小朋友擺盪）
+    const sw = G(pg, 3, 0, -2.2);
+    [-2.2, 2.2].forEach(x => { tube(sw, new V3(x, 0, -1.2), new V3(x, 3.2, 0), .1, '#ff9e5e', .02); tube(sw, new V3(x, 0, 1.2), new V3(x, 3.2, 0), .1, '#ff9e5e', .02); });
+    tube(sw, new V3(-2.3, 3.2, 0), new V3(2.3, 3.2, 0), .1, '#ff9e5e', .02);
+    [-1.1, 1.1].forEach((x, i) => { const piv = G(sw, x, 3.2, 0);
+      [-.35, .35].forEach(dx => M(box(.03, 2.3, .03), '#9aa3b5', { x: dx, y: -1.15, parent: piv, ol: 0 }));
+      M(box(.8, .08, .4), '#2c3554', { y: -2.3, parent: piv, ol: .02 });
+      if (i === 0) { const kid = person('#ffb3c8', '#4d5b85'); kid.scale.setScalar(.6); kid.position.set(0, -2.9, 0); kid.rotation.y = Math.PI / 2; piv.add(kid); }
+      W.updaters.push(t => { piv.rotation.x = Math.sin(t * 2.2 + i * 1.3) * (i === 0 ? .55 : .18); }); });
+    // 蹺蹺板（兩個小朋友）
+    const ss = G(pg, 2.8, 0, 3.4);
+    M(box(.4, .7, .4), '#ffd166', { y: .35, parent: ss, ol: .02 });
+    const beam = G(ss, 0, .75, 0);
+    M(box(4.2, .15, .4), '#5fbf73', { parent: beam, ol: .03 });
+    [-1, 1].forEach(s => { M(box(.08, .5, .3), '#2c3554', { x: s * 1.7, y: .3, parent: beam, ol: 0 });
+      const kid = person(s > 0 ? '#8fc8ff' : '#ffd166', '#6b5d55'); kid.scale.setScalar(.55); kid.position.set(s * 1.9, -.4, 0); kid.rotation.y = s > 0 ? -Math.PI / 2 : Math.PI / 2; beam.add(kid); });
+    W.updaters.push(t => { beam.rotation.z = Math.sin(t * 1.8) * .22; });
+    // 攀爬網（彩色網格圓頂）
+    const net = new T.LineSegments(new T.EdgesGeometry(new T.IcosahedronGeometry(1.8, 1)), new T.LineBasicMaterial({ color: '#e0707e' }));
+    net.position.set(-3.2, 1.2, 2.6); net.scale.y = .75; pg.add(net);
+    // 搖搖馬
+    [[-.6, 4.8, '#c6a8ff'], [.9, 5.4, '#a8e6cf']].forEach(([x, z, c], i) => { const r = G(pg, x, 0, z);
+      M(cyl(.08, .08, .6, 6), '#9aa3b5', { y: .3, parent: r, ol: 0 });
+      const body = G(r, 0, .7, 0); M(sph(.45, 1), c, { s: [1.3, .9, .8], parent: body, ol: .03 }); M(sph(.3, 1), c, { x: .55, y: .35, parent: body, ol: .03 });
+      W.updaters.push(t => { body.rotation.z = Math.sin(t * 3 + i) * .18; }); });
+    // 跑跳的小朋友
+    for (let i = 0; i < 2; i++) { const kid = person(['#ff9fb1', '#9be0e8'][i], '#4d5b85'); kid.scale.setScalar(.6); pg.add(kid);
+      W.updaters.push(t => { const a = t * (.9 + i * .2) + i * 3; kid.position.set(Math.cos(a) * 4.8, .1 + Math.abs(Math.sin(t * 6 + i)) * .25, Math.sin(a) * 4.8); kid.rotation.y = -a; kid.userData.walk(t * 10); }); }
+    W.playground = W2(10, -1);
+    W.colliders.push(Object.assign({ r: 6.8 }, (p => ({ x: p.x, z: p.z }))(W.playground)));
+
+    // ── 林木（樟樹、楓香等搖曳樹）＋杜鵑花叢＋路燈＋長椅 ──
+    for (let i = 0; i < 30; i++) { const a = i / 30 * Math.PI * 2 + rnd(-.05, .05), r = i % 2 ? rnd(18.6, 21) : rnd(13, 14.5);
+      if (Math.abs(Math.sin(a)) > .93 && Math.cos(a) * 0 === 0 && Math.sin(a) > 0) continue;   // 入口留空
+      const p = [Math.cos(a) * r, Math.sin(a) * r]; if (Math.hypot(p[0] - 10, p[1] + 1) < 8 || Math.hypot(p[0] + 10, p[1] + 1) < 7.5 || Math.hypot(p[0], p[1] + 11) < 8) continue;
+      tree(g, p[0], p[1], rnd(1, 1.45), i % 4 === 0 ? 0 : 1 + (i % 2)); }
+    const azalea = ['#ff8fb3', '#ffb3cf', '#ffffff', '#f06f9a'];
+    for (let i = 0; i < 26; i++) { const a = rnd(0, 6.28), r = rnd(15.8, 17.2) + (i % 2 ? 2 : -2.2);
+      if (Math.sin(a) > .9) continue;
+      const b = G(g, Math.cos(a) * r, 0, Math.sin(a) * r);
+      M(sph(.8, 1), '#6fae6a', { y: .55, s: [1.2, .75, 1.2], parent: b, ol: .04 });
+      for (let k = 0; k < 6; k++) M(sph(.16, 0), azalea[(i + k) % 4], { x: rnd(-.8, .8), y: rnd(.8, 1.05), z: rnd(-.7, .7), parent: b, ol: 0, cast: false }); }
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 + .2; streetLight(g, Math.cos(a) * 17.9, Math.sin(a) * 17.9); }
+    [[-4, 8, 0], [4, 8, Math.PI], [-6, -4, .8]].forEach(([x, z, r]) => { const b = G(g, x, 0, z); b.rotation.y = r;
+      M(box(2.4, .2, .7), '#c99b77', { y: .7, parent: b, ol: .04 }); M(box(2.4, .7, .15), '#c99b77', { y: 1.1, z: -.35, parent: b, ol: .04 });
+      [-1, 1].forEach(s => M(box(.15, .7, .6), '#5e6a8a', { x: s, y: .35, parent: b, ol: .02 })); });
+  }
+  function egret() {
+    const e = G(null);
+    M(sph(.32, 1), '#ffffff', { y: 1.1, s: [.8, .8, 1.4], parent: e, ol: .03 });
+    [-.08, .08].forEach(x => M(cyl(.025, .025, .9, 4), '#2c3554', { x, y: .5, parent: e, ol: 0 }));
+    const neck = G(e, 0, 1.25, .3); e.userData.neck = neck;
+    M(cyl(.05, .07, .7, 6), '#ffffff', { y: .3, rx: .3, parent: neck, ol: .02 });
+    M(sph(.12, 1), '#ffffff', { y: .65, z: .12, parent: neck, ol: .02 });
+    M(new T.ConeGeometry(.04, .38, 6), '#ffd166', { y: .63, z: .4, rx: Math.PI / 2, parent: neck, ol: 0 });
+    return e;
   }
 
   /* =====================================================================
@@ -863,7 +1132,7 @@
     [[6, -8, 4.2], [-4, -10, 3.4], [10, 2, 3.2]].forEach(([x, z, r], i) => {
       const tk = G(g, x, 0, z);
       M(cyl(r + .4, r + .5, 1.6, 32), '#f3ece0', { y: .8, parent: tk });
-      const w = new T.Mesh(new T.CircleGeometry(r, 32), waterMaterial(i === 2 ? '#a8e6cf' : '#9fd0e8', i === 2 ? '#7fd3b4' : '#76b7d8'));
+      const w = new T.Mesh(new T.CircleGeometry(r, 32), waterMaterial(i === 2 ? '#b5ecd6' : '#a8dcef', i === 2 ? '#5fc0a0' : '#4f9fcf', { radial: true }));
       w.rotation.x = -Math.PI / 2; w.position.y = 1.62; tk.add(w);
       const arm = G(tk, 0, 1.9, 0);
       M(box(r * 2, .3, .5), '#8a7fd8', { parent: arm, ol: .05 });
@@ -897,122 +1166,300 @@
       turtle.userData.head.rotation.z = Math.sin(t * 2) * .12;
     });
   }
+  function shellTex() {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 256; const x = c.getContext('2d');
+    const gr = x.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#5fae7c'); gr.addColorStop(1, '#7cc795'); x.fillStyle = gr; x.fillRect(0, 0, 512, 256);
+    const R = 34;
+    for (let row = 0; row < 6; row++) for (let col = 0; col < 10; col++) {
+      const cx = col * R * 1.6 + (row % 2) * R * .8, cy = row * R * 1.38 + 20;
+      x.beginPath(); for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + Math.PI / 6; x.lineTo(cx + Math.cos(a) * R * .86, cy + Math.sin(a) * R * .86); } x.closePath();
+      const hg = x.createRadialGradient(cx - 6, cy - 8, 2, cx, cy, R); hg.addColorStop(0, '#b4e6bf'); hg.addColorStop(1, '#6dbb88');
+      x.fillStyle = hg; x.fill(); x.lineWidth = 5; x.strokeStyle = '#3c7a56'; x.stroke();
+      x.lineWidth = 2; x.strokeStyle = 'rgba(255,255,255,.35)'; x.beginPath(); x.arc(cx - 4, cy - 6, R * .4, Math.PI, Math.PI * 1.6); x.stroke();
+    }
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
+  }
+  // 烏龜工程師（遊戲角色精修：鱗甲紋龜殼、大眼睛會眨、安全帽頭燈、反光背心、手電筒）
   function makeTurtle() {
-    const t = G(null);
-    t.scale.setScalar(1.5);
-    M(sph(1.05, 2), '#fff3d6', { y: .9, s: [1, 1.15, .9], parent: t });                // 肚子
-    const shell = M(sph(1.15, 1), '#7cc59a', { y: 1.0, z: -.35, s: [1.05, 1.15, .85], parent: t });
-    // 殼紋
-    for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; M(new T.CircleGeometry(.28, 6), '#5aa97b', { x: Math.cos(a) * .55, y: 1.2 + Math.sin(a) * .55, z: -1.32, ry: Math.PI, parent: t, ol: 0, cast: false }); }
-    // 反光背心帶
-    M(new T.TorusGeometry(1.0, .09, 6, 24), '#ffb84d', { y: .7, rx: Math.PI / 2, parent: t, ol: 0 });
-    const head = G(t, 0, 2.25, .1); t.userData.head = head;
-    M(sph(.75, 2), '#9bd6ad', { parent: head });
-    [-1, 1].forEach(s => { M(sph(.16, 1), '#2c3554', { x: s * .28, y: .1, z: .62, parent: head, ol: 0 }); M(sph(.05, 0), '#ffffff', { x: s * .28 + .05, y: .16, z: .76, parent: head, ol: 0 }); M(sph(.12, 1), '#ffb3c1', { x: s * .48, y: -.15, z: .55, parent: head, ol: 0 }); });
-    // 安全帽
-    M(new T.SphereGeometry(.8, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), '#ffd166', { y: .18, parent: head, ol: .05 });
-    M(cyl(.95, .95, .08, 24), '#ffd166', { y: .2, z: .12, parent: head, ol: .03 });
-    M(box(.3, .2, .1), '#ffffff', { y: .55, z: .72, parent: head, ol: 0 });
-    // 揮手手臂
-    const arm = G(t, .95, 1.4, .1); t.userData.arm = arm;
-    M(new T.CapsuleGeometry(.2, .8, 4, 8), '#9bd6ad', { y: .5, parent: arm, ol: .04 });
-    M(new T.CapsuleGeometry(.2, .6, 4, 8), '#9bd6ad', { x: -.95, y: 1.3, rz: .5, parent: t, ol: .04 });
+    const t = G(null); t.scale.setScalar(1.45);
+    const skin = '#93d3a6', skinD = '#6fb889';
+    // 腹甲（前）
+    const bellyT = textTex(128, 256, (x) => { x.fillStyle = '#fff1cf'; x.fillRect(0, 0, 128, 256); x.strokeStyle = '#e2c98f'; x.lineWidth = 6;
+      for (let y = 40; y < 256; y += 48) { x.beginPath(); x.moveTo(10, y); x.quadraticCurveTo(64, y + 12, 118, y); x.stroke(); } x.beginPath(); x.moveTo(64, 0); x.lineTo(64, 256); x.stroke(); });
+    const body = M(sph(1.0, 3), null, { y: 1.0, s: [1, 1.18, .82], parent: t, mat: new T.MeshToonMaterial({ map: bellyT, gradientMap: gradMap }) });
+    // 背甲
+    const shell = new T.Mesh(new T.SphereGeometry(1.18, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), new T.MeshToonMaterial({ map: shellTex(), gradientMap: gradMap }));
+    shell.rotation.x = -Math.PI / 2; shell.scale.set(1.05, 1, 1.25); shell.position.set(0, 1.05, -.25); shell.castShadow = true; t.add(shell); outline(shell, .06);
+    M(new T.TorusGeometry(1.2, .12, 10, 40), '#e8d69c', { y: 1.05, z: -.25, s: [1.05, 1.25, 1], parent: t, ol: .02 });
+    // 反光背心
+    const vest = M(cyl(1.02, 1.02, .9, 28, 1), '#ff9e5e', { y: .85, s: [1, 1, .84], parent: t, ol: .02 });
+    [.62, 1.05].forEach(y => M(cyl(1.035, 1.035, .1, 28), '#fff6b0', { y, s: [1, 1, .85], parent: t, ol: 0 }));
+    M(box(.34, .3, .08), '#ff8b4a', { x: .38, y: .78, z: .86, parent: t, ol: .015 });
+    // 頭
+    const head = G(t, 0, 2.3, .15); t.userData.head = head;
+    M(sph(.82, 3), skin, { s: [1.05, .95, 1], parent: head });
+    M(sph(.5, 2), '#c6ebcf', { y: -.25, z: .45, s: [1.2, .7, .7], parent: head, ol: 0 });       // 口鼻
+    [-1, 1].forEach(s => M(sph(.035, 0), skinD, { x: s * .1, y: -.12, z: .8, parent: head, ol: 0 }));  // 鼻孔
+    const mouth = new T.Mesh(new T.TorusGeometry(.2, .03, 6, 16, Math.PI), toon('#2c3554')); mouth.position.set(0, -.3, .76); mouth.rotation.z = Math.PI; head.add(mouth);
+    const lids = [];
+    [-1, 1].forEach(s => { const eye = G(head, s * .33, .14, .62);
+      M(sph(.24, 2), '#ffffff', { s: [1, 1.15, .7], parent: eye, ol: .03 });
+      M(sph(.15, 2), '#5b3a29', { z: .12, s: [1, 1.15, .6], parent: eye, ol: 0 });
+      M(sph(.09, 1), '#1b1f2e', { z: .17, s: [1, 1.15, .6], parent: eye, ol: 0 });
+      M(sph(.045, 0), '#ffffff', { x: .05, y: .07, z: .22, parent: eye, ol: 0 }); M(sph(.022, 0), '#ffffff', { x: -.05, y: -.05, z: .22, parent: eye, ol: 0 });
+      const lid = M(new T.SphereGeometry(.255, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), skin, { s: [1, 1.2, .78], parent: eye, ol: 0 }); lid.scale.y = .01; lids.push(lid);
+      M(sph(.13, 1), '#ffb3c1', { x: s * .25, y: -.3, z: .05, s: [1, .6, .5], parent: eye, ol: 0 }); });
+    // 安全帽＋頭燈
+    M(new T.SphereGeometry(.88, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2), '#ffd166', { y: .2, parent: head, ol: .04 });
+    M(box(.18, .5, 1.6), '#f5c24a', { y: .62, s: [1, .9, 1], parent: head, ol: .02 });
+    M(cyl(1.0, 1.02, .07, 32), '#ffd166', { y: .22, z: .12, parent: head, ol: .02 });
+    M(cyl(.14, .14, .14, 14), '#3d4258', { y: .45, z: .8, rx: Math.PI / 2 - .3, parent: head, ol: .02 });
+    const lamp = M(cyl(.1, .1, .02, 14), '#fff6c9', { y: .47, z: .88, rx: Math.PI / 2 - .3, parent: head, ol: 0, mat: new T.MeshBasicMaterial({ color: '#fffbe0' }) });
+    // 手臂（右手揮、左手拿手電筒）
+    const arm = G(t, .95, 1.45, .1); t.userData.arm = arm;
+    M(new T.CapsuleGeometry(.2, .7, 4, 10), skin, { y: .45, parent: arm, ol: .03 });
+    M(sph(.24, 2), '#ffffff', { y: .95, parent: arm, ol: .03 });
+    const armL = G(t, -.95, 1.45, .1); armL.rotation.set(.9, 0, .5);
+    M(new T.CapsuleGeometry(.2, .7, 4, 10), skin, { y: -.45, parent: armL, ol: .03 });
+    M(sph(.24, 2), '#ffffff', { y: -.95, parent: armL, ol: .03 });
+    M(cyl(.12, .12, .7, 12), '#3d4258', { y: -1.05, z: .25, rx: Math.PI / 2, parent: armL, ol: .02 });
+    const beam = new T.Mesh(new T.ConeGeometry(.6, 2.6, 16, 1, true), new T.MeshBasicMaterial({ color: '#fff6c9', transparent: true, opacity: .22, depthWrite: false, side: T.DoubleSide }));
+    beam.position.set(0, -1.05, 1.9); beam.rotation.x = -Math.PI / 2; armL.add(beam);
+    // 眨眼
+    W.updaters.push(tm => { const k = tm % 3.4; const b = k < .12 ? Math.sin(k / .12 * Math.PI) : 0; lids.forEach(l => (l.scale.y = .01 + b * 1.1)); });
     return t;
   }
 
   /* =====================================================================
-   * 大地處：梯田式山坡地＋步道＋涼亭＋瀑布＋山神爺爺＋監測站
+   * 大地處：仿信義區象山——青翠山形、六巨石、石階登山步道、木造觀景平台、山頂涼亭、
+   *         溪流瀑布、擋土牆與坡地監測站、騰雲飛行的山神爺爺
    * ===================================================================== */
-  function buildGEO() {
-    const g = W.zones.geo = G(null, 0, 0, -58);
-    const mt = G(null, 0, 0, -94);
-    const layers = [[34, 7, '#b9dca0'], [27, 7, '#aed69a'], [20.5, 7, '#c3e3a8'], [14, 6.5, '#b4dba0'], [8, 5.5, '#cbe8b2']];
-    let y = 0;
-    layers.forEach(([r, h, c], i) => {
-      M(facet(cyl(r - 2.8, r, h, 28 - i * 2)), c, { y: y + h / 2, parent: mt, ol: .16 });
-      if (i < 4) { // 擋土牆
-        const wall = new T.Mesh(new T.CylinderGeometry(r - 2.75, r - 2.75, .9, 28 - i * 2, 1, true, -.9, 1.8), toon('#d9d2c4', { side: T.DoubleSide }));
-        wall.position.y = y + h + .2; wall.rotation.y = Math.PI; mt.add(wall);
-      }
-      y += h;
-    });
-    W.mtTop = y;
-    W.colliders.push({ x: 0, z: -94, r: 34.5, mountain: true });
-    // 山頂涼亭
-    const pv = G(mt, 0, y, 0);
-    [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]].forEach(([x, z]) => M(cyl(.18, .18, 3, 8), '#c9573f', { x, y: 1.5, z, parent: pv, ol: .04 }));
-    M(new T.ConeGeometry(3.4, 1.8, 4), '#5c8fa8', { y: 3.9, ry: Math.PI / 4, parent: pv, ol: .08 });
-    M(sph(.3, 1), '#ffd166', { y: 5, parent: pv, ol: .04 });
-    // 樹林（山上）
-    for (let i = 0; i < 26; i++) { const li = (Math.random() * 4) | 0, [r] = layers[li]; const a = rnd(-Math.PI, Math.PI);
-      if (Math.abs(a - Math.PI / 2) < .35) continue;   // 正面留給步道
-      const ly = layers.slice(0, li + 1).reduce((s, l) => s + l[1], 0);
-      const rr = r - rnd(3.3, 5);
-      const tr = tree(mt, Math.cos(a) * rr, Math.sin(a) * rr, rnd(.7, 1.1), 1 + (i % 2)); tr.position.y = ly - .1; }
-    // 之字形步道（正面）
-    for (let i = 0; i < 4; i++) { const ly = layers.slice(0, i + 1).reduce((s, l) => s + l[1], 0), r = layers[i][0] - 2.8 - .4;
-      for (let k = 0; k < 6; k++) { const a = Math.PI / 2 + (k - 2.5) * .06 * (i % 2 ? -1 : 1);
-        M(cyl(.45, .5, .2, 8), '#efe3cf', { x: Math.cos(a) * (r + 1.2 - k * .2), y: ly - (k * .9), z: Math.sin(a) * (r + 1.2 - k * .2), parent: mt, ol: 0, cast: false }); } }
-    // 瀑布（溪源）
-    const fall = new T.Mesh(new T.PlaneGeometry(3, 20, 1, 1), waterMaterial('#bfe9f7', '#8fd3ee'));
-    fall.position.set(16, 10, 18); fall.rotation.y = .7; fall.rotation.x = -.15; mt.add(fall);
-    // 山坡監測站（閃燈）
-    [[-14, 7, 20], [12, 14, 14], [-6, 21, 12]].forEach(([x, yy, z], i) => {
-      const s = G(mt, x, yy, z);
-      M(cyl(.08, .1, 2.6, 6), '#5e6a8a', { y: 1.3, parent: s, ol: .03 });
-      M(box(.6, .4, .3), '#ffffff', { y: 2, parent: s, ol: .03 });
-      const led = M(sph(.18, 1), '#7cf0b0', { y: 2.7, parent: s, ol: 0, mat: new T.MeshBasicMaterial({ color: '#7cf0b0' }) });
-      W.updaters.push(t => { led.visible = ((t * 1.5 + i * .3) % 1) < .5; });
-    });
-    // 山神爺爺（坐在雲上）
-    const god = makeMountainGod();
-    god.position.set(0, 15, -94 + 24.5);
-    W.scene.add(god);
-    W.updaters.push(t => {
-      god.position.y = 15 + Math.sin(t * 1.1) * .45;
-      god.rotation.y = Math.sin(t * .4) * .18;
-      god.userData.staff.rotation.z = .15 + Math.sin(t * 1.3) * .08;
-      const w = (t % 8) < 2.5; god.userData.hand.rotation.z = w ? 2.2 + Math.sin(t * 8) * .35 : .5;
-      god.userData.cloud.children.forEach((c, i) => { c.position.y = Math.sin(t * 1.5 + i) * .12; });
-    });
-    // 兩側遠山
-    [[-62, -122, 30, 16], [64, -120, 34, 20], [-118, -70, 28, 12], [122, -62, 30, 14], [-150, 10, 26, 10], [150, 20, 28, 11]].forEach(([x, z, r, h], i) =>
-      M(facet(new T.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2)), i % 2 ? '#b9d9a6' : '#a9d19a', { x, y: -.3, z, s: [r, h, r * .8], ol: .012 }));
+  const MT = { x: 0, z: -96 };
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function hill(x, z) {
+    const dx = x - MT.x, dz = z - MT.z, d = Math.hypot(dx, dz);
+    if (d > 47) return 0;
+    const a = Math.atan2(dz, dx);
+    let h = 30 * Math.exp(-Math.pow(d / 20, 2));
+    h += 10 * Math.exp(-((dx - 14) ** 2 + (dz + 10) ** 2) / 140);       // 東側稜線（往 101 方向的觀景稜）
+    h += 7 * Math.exp(-((dx + 17) ** 2 + (dz + 2) ** 2) / 170);
+    h += 6 * Math.exp(-((dx - 4) ** 2 + (dz - 18) ** 2) / 120) * .6;
+    h += (Math.sin(a * 5 + d * .25) * .9 + Math.sin(a * 9 - d * .4) * .5) * Math.min(1, d / 10) * Math.exp(-Math.pow(d / 30, 2)) * 1.4;
+    return Math.max(0, h * (1 - smooth(38, 47, d)));
   }
-  function makeMountainGod() {
-    const g = G(null); g.scale.setScalar(2.1);
-    // 雲座
-    const cloud = G(g, 0, 0, 0); g.userData.cloud = cloud;
-    [[0, 0, 0, 1.6], [1.5, -.1, .3, 1.1], [-1.5, -.1, .2, 1.2], [.6, -.2, 1.2, .9], [-.8, -.2, 1.1, .9]].forEach(([x, y, z, r]) => M(sph(r, 2), '#ffffff', { x, y, z, parent: cloud, ol: .08 }));
-    // 長袍身體
-    M(cyl(.9, 1.6, 2.6, 20), '#d8cdf5', { y: 1.9, parent: g });
-    M(new T.TorusGeometry(1.15, .16, 8, 24), '#c9984a', { y: 1.5, rx: Math.PI / 2, parent: g, ol: .03 });
-    // 頭
-    const head = G(g, 0, 3.75, 0);
-    M(sph(.95, 2), '#ffe2cc', { parent: head });
-    // 慈祥眉眼（彎彎閉眼）
-    [-1, 1].forEach(s => {
-      M(new T.TorusGeometry(.15, .04, 6, 12, Math.PI), '#2c3554', { x: s * .34, y: .05, z: .86, parent: head, ol: 0 });
-      M(new T.CapsuleGeometry(.09, .32, 4, 8), '#ffffff', { x: s * .38, y: .32, z: .8, rz: s * 1.2, parent: head, ol: .02 });
-      M(sph(.14, 1), '#ffb3c1', { x: s * .55, y: -.18, z: .72, parent: head, ol: 0 });
+  W.ground = (x, z) => hill(x, z);
+
+  function buildGEO() {
+    const g = W.zones.geo = G(null, 0, 0, 0);
+    // ── 山體地形（頂點著色：山腳草綠→山腰深綠→山頂嫩綠，陡坡露岩）──
+    const S = 110, N = isMobile ? 110 : 170;
+    const geo = new T.PlaneGeometry(S, S, N, N); geo.rotateX(-Math.PI / 2); geo.translate(MT.x, 0, MT.z);
+    const pos = geo.attributes.position, cols = new Float32Array(pos.count * 3), c = new T.Color();
+    const c1 = new T.Color('#9fd884'), c2 = new T.Color('#4fa868'), c3 = new T.Color('#7fcc76'), rock = new T.Color('#b4b8a0'), soil = new T.Color('#c9dc9a');
+    for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getZ(i), h = hill(x, z); pos.setY(i, h > 0 ? h : -.4); }
+    geo.computeVertexNormals();
+    const nrm = geo.attributes.normal;
+    for (let i = 0; i < pos.count; i++) { const h = pos.getY(i), ny = nrm.getY(i), n = Math.sin(pos.getX(i) * .7) * Math.cos(pos.getZ(i) * .6) * .5 + .5;
+      c.copy(c1).lerp(c2, smooth(2, 14, h)).lerp(c3, smooth(22, 34, h)); c.lerp(soil, (1 - smooth(0, 2, h)) * .5);
+      c.lerp(rock, smooth(.6, .42, ny) * .7); c.offsetHSL(0, 0, (n - .5) * .05); cols.set([c.r, c.g, c.b], i * 3); }
+    geo.setAttribute('color', new T.BufferAttribute(cols, 3));
+    const terrain = new T.Mesh(geo, new T.MeshToonMaterial({ vertexColors: true, gradientMap: gradMap }));
+    terrain.receiveShadow = true; terrain.castShadow = true; W.scene.add(terrain);
+
+    // ── 登山步道（石階＋木扶手）──
+    const trail = new T.CatmullRomCurve3([[3, -51], [8, -58], [2, -64], [9, -70], [5, -75], [13, -79], [15, -83], [9, -88], [4, -92], [0, -96]].map(([x, z]) => new V3(x, 0, z)));
+    W.trail = trail;
+    const stepN = 150, stepG = box(2.1, .28, .55), postG = cyl(.07, .08, 1.1, 6);
+    const stepM = new T.InstancedMesh(stepG, toon('#ddd3c1'), stepN), postM = new T.InstancedMesh(postG, toon('#a8794f'), stepN * 2 / 3 | 0);
+    const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(); let pi = 0; const rails = [[], []];
+    for (let i = 0; i < stepN; i++) { const u = i / (stepN - 1), p = trail.getPointAt(u), tn = trail.getTangentAt(u), yaw = Math.atan2(tn.x, tn.z);
+      const y = hill(p.x, p.z) + .14; q.setFromEuler(e.set(0, yaw, 0)); m4.compose(new V3(p.x, y, p.z), q, new V3(1, 1, 1)); stepM.setMatrixAt(i, m4);
+      if (i % 3 === 0) [-1, 1].forEach((s, k) => { const px = p.x + Math.cos(yaw) * 1.2 * s, pz = p.z - Math.sin(yaw) * 1.2 * s, py = hill(px, pz);
+        if (pi < postM.count) { m4.compose(new V3(px, py + .55, pz), q, new V3(1, 1, 1)); postM.setMatrixAt(pi++, m4); } rails[k].push(new V3(px, py + 1.08, pz)); }); }
+    [stepM, postM].forEach(o => { o.castShadow = true; o.receiveShadow = true; W.scene.add(o); });
+    rails.forEach(r => { if (r.length > 1) { const tg = new T.TubeGeometry(new T.CatmullRomCurve3(r), r.length * 3, .05, 5, false); const rm = new T.Mesh(tg, toon('#a8794f')); rm.castShadow = true; W.scene.add(rm); } });
+    // 步道入口牌樓
+    const gate = G(null, 3, 0, -50.5); gate.rotation.y = .5;
+    [-1.6, 1.6].forEach(x => M(cyl(.18, .2, 3.2, 8), '#a8794f', { x, y: 1.6, parent: gate, ol: .03 }));
+    M(box(4, .5, .5), '#a8794f', { y: 3.3, parent: gate, ol: .03 });
+    const gt = textTex(512, 96, (x, w, h) => { x.fillStyle = '#7a5a3c'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff3d6'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `900 52px ${FONT_TC}`; x.fillText('象山親山步道', w / 2, h / 2); });
+    const gs = new T.Mesh(new T.PlaneGeometry(3.4, .64), new T.MeshBasicMaterial({ map: gt, side: T.DoubleSide })); gs.position.set(0, 3.3, .27); gate.add(gs);
+
+    // ── 觀景平台（木棧平台、欄杆、長椅、望遠鏡，面向 101）──
+    const pp = trail.getPointAt(.62), ph = hill(pp.x, pp.z);
+    const deck = G(null, pp.x + 2.5, ph, pp.z + 1); deck.rotation.y = Math.atan2(24 - deck.position.x, -4 - deck.position.z);
+    W.platform = deck.position.clone();
+    M(box(9, .35, 6), '#c99b77', { y: .9, parent: deck });
+    for (let k = -4; k <= 4; k += 1) M(box(.06, .02, 6), '#b08460', { x: k, y: 1.08, parent: deck, ol: 0, cast: false });
+    [[-4.3, -2.8], [4.3, -2.8], [-4.3, 2.8], [4.3, 2.8], [0, 2.8], [-2.2, 2.8], [2.2, 2.8]].forEach(([x, z]) => M(cyl(.12, .14, 3, 8), '#a8794f', { x, y: -.4, z, parent: deck, ol: .03 }));
+    const railPts = [[-4.4, -2.9], [-4.4, 2.9], [4.4, 2.9], [4.4, -2.9]];
+    for (let i = 0; i < 3; i++) { const [ax, az] = railPts[i], [bx, bz] = railPts[i + 1];
+      tube(deck, new V3(ax, 2.05, az), new V3(bx, 2.05, bz), .07, '#a8794f', .02); tube(deck, new V3(ax, 1.55, az), new V3(bx, 1.55, bz), .04, '#a8794f', 0);
+      const L = Math.hypot(bx - ax, bz - az); for (let k = 0; k <= L; k += 1.1) M(cyl(.05, .05, 1, 6), '#a8794f', { x: ax + (bx - ax) * k / L, y: 1.55, z: az + (bz - az) * k / L, parent: deck, ol: 0 }); }
+    [-2, 2].forEach(x => { M(box(2, .15, .6), '#a8794f', { x, y: 1.55, z: -1.8, parent: deck, ol: .03 }); [-.8, .8].forEach(d => M(box(.12, .5, .5), '#7a5a3c', { x: x + d, y: 1.3, z: -1.8, parent: deck, ol: 0 })); });
+    const scope = G(deck, 2.5, 1.05, 2); M(cyl(.08, .1, 1.1, 8), '#5e6a8a', { y: .55, parent: scope, ol: .02 }); M(cyl(.16, .2, .8, 10), '#4a7fd4', { y: 1.2, z: .1, rx: 1.2, parent: scope, ol: .02 });
+    const sg = textTex(512, 128, (x, w, h) => { x.fillStyle = '#fbf3e0'; x.fillRect(0, 0, w, h); x.fillStyle = '#7a5a3c'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `900 46px ${FONT_TC}`; x.fillText('觀景平台', w / 2, 46); x.font = `700 28px ${FONT_TC}`; x.fillText('▸ 臺北 101・信義計畫區', w / 2, 96); });
+    const sb = G(deck, -3.5, 1.05, -2.4); M(cyl(.06, .06, 1.6, 6), '#7a5a3c', { y: .8, parent: sb, ol: 0 });
+    const sp = new T.Mesh(new T.PlaneGeometry(1.6, .4), new T.MeshBasicMaterial({ map: sg, side: T.DoubleSide })); sp.position.y = 1.7; sb.add(sp);
+    // ── 六巨石 ──
+    [[-6.5, -1, 1.7], [-8, 3, 1.4], [-3.5, -5, 1.3], [7, -4, 1.6], [8.5, .5, 1.2], [-5.5, 6, 1.1]].forEach(([x, z, r], i) => {
+      const wp = deck.localToWorld(new V3(x, 0, z)), y = hill(wp.x, wp.z);
+      M(facet(new T.DodecahedronGeometry(r, 0)), i % 2 ? '#c8c4b4' : '#b9b5a5', { x: wp.x, y: y + r * .55, z: wp.z, rx: i, ry: i * 2, s: [1, 1.25, .9], ol: .08 }); });
+    // ── 山頂六角涼亭 ──
+    const top = G(null, 0, hill(0, -96), -96);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; M(cyl(.16, .18, 3.2, 8), '#c9573f', { x: Math.cos(a) * 2, y: 1.6, z: Math.sin(a) * 2, parent: top, ol: .03 }); }
+    M(cyl(2.3, 2.3, .3, 6), '#e9e1d2', { y: .15, parent: top, ol: .03 });
+    M(new T.ConeGeometry(3.4, 1.4, 6), '#4f8a9c', { y: 3.8, parent: top, ol: .06 });
+    M(new T.ConeGeometry(2, 1.4, 6), '#4f8a9c', { y: 4.8, parent: top, ol: .05 });
+    M(sph(.28, 1), '#ffd166', { y: 5.7, parent: top, ol: .03 });
+    W.summit = top.position.clone();
+
+    // ── 山林：密林（Instanced）──
+    const pts = [];
+    for (let k = 0; k < 2400 && pts.length < (isMobile ? 220 : 380); k++) {
+      const a = rnd(0, 6.28), r = Math.sqrt(Math.random()) * 42, x = MT.x + Math.cos(a) * r, z = MT.z + Math.sin(a) * r, h = hill(x, z);
+      if (h < .8) continue;
+      let near = false; for (let u = 0; u <= 1; u += .02) { const p = trail.getPointAt(u); if (Math.hypot(p.x - x, p.z - z) < 2.6) { near = true; break; } }
+      if (near || Math.hypot(x - W.platform.x, z - W.platform.z) < 9 || Math.hypot(x, z + 96) < 4.5) continue;
+      pts.push([x, h, z, rnd(.75, 1.35), Math.random()]);
+    }
+    instTrees(pts);
+    // ── 溪流＋瀑布（大地處的水流入河川）──
+    const stream = new T.CatmullRomCurve3([[24, -86], [23, -79], [21, -72], [19, -66], [16, -60]].map(([x, z]) => new V3(x, 0, z)));
+    const sm = new T.Mesh(ribbon(stream, 2.6, 80, u => { const p = stream.getPointAt(u); return hill(p.x, p.z) + .18; }, .6), waterMaterial('#b5e8f2', '#59b2d6', { flow: 1.6 }));
+    sm.renderOrder = 1; W.scene.add(sm);
+    const fp = stream.getPointAt(.12), fy = hill(fp.x, fp.z);
+    const cliff = M(facet(new T.DodecahedronGeometry(3, 0)), '#b9b5a5', { x: fp.x + 1, y: fy + 1, z: fp.z - 2.5, s: [1.4, 1.2, .8], ol: .1 });
+    const fall = new T.Mesh(new T.PlaneGeometry(2.2, 5), fallMaterial()); fall.position.set(fp.x, fy + 2.2, fp.z - .6); fall.rotation.y = .2; W.scene.add(fall);
+    W.fallPos = new V3(fp.x, fy, fp.z);
+    // ── 擋土牆（格框植生）＋坡地監測站 ──
+    for (let i = 0; i < 7; i++) { const a = -Math.PI / 2 + .6 + i * .12, r = 37, x = Math.cos(a) * r + MT.x, z = Math.sin(a) * r + MT.z;
+      const w = G(null, x, hill(x, z), z); w.rotation.y = -a + Math.PI / 2;
+      M(box(5.2, 1.6, .8), '#d9d2c4', { y: .5, parent: w, ol: .04 });
+      for (let k = -2; k <= 2; k++) M(box(.9, .5, .1), '#8fcf86', { x: k * 1.05, y: .6, z: .42, parent: w, ol: 0 }); }
+    [[-14, -78], [12, -90], [-8, -88]].forEach(([x, z], i) => { const s = G(null, x, hill(x, z), z);
+      M(cyl(.08, .1, 2.6, 6), '#5e6a8a', { y: 1.3, parent: s, ol: .03 }); M(box(.7, .5, .3), '#ffffff', { y: 2, parent: s, ol: .03 });
+      M(box(.8, .05, .5), '#4a7fd4', { y: 2.7, rx: -.4, parent: s, ol: .02 });
+      const led = M(sph(.16, 1), '#7cf0b0', { y: 2.4, z: .2, parent: s, ol: 0, mat: new T.MeshBasicMaterial({ color: '#7cf0b0' }) });
+      W.updaters.push(t => { led.visible = ((t * 1.5 + i * .3) % 1) < .5; }); });
+
+    // ── 山神爺爺：騰雲繞山飛行，玩家到觀景台或山頂時飛來祝福 ──
+    const god = W.god = makeMountainGod(); W.scene.add(god);
+    const spark = buildBlessing();
+    let gp = new V3(20, 40, -96), ang = 0;
+    W.updaters.push((t, dt) => {
+      const talking = W.mode === 'explore' && W._npc === 'god';
+      const pl = cam.pos, nearSpot = W.mode === 'explore' && (Math.hypot(pl.x - W.platform.x, pl.z - W.platform.z) < 16 || Math.hypot(pl.x - W.summit.x, pl.z - W.summit.z) < 14);
+      let target;
+      if (nearSpot || talking) { const dir = new V3(pl.x - MT.x, 0, pl.z - MT.z).normalize(); target = new V3(pl.x + dir.x * 7, hill(pl.x, pl.z) + 6.5, pl.z + dir.z * 7); }
+      else { ang += dt * .1; target = new V3(MT.x + Math.cos(ang) * 27, 41 + Math.sin(t * .5) * 3, MT.z + Math.sin(ang) * 22 + 6); }
+      const prev = gp.clone(); gp.lerp(target, Math.min(1, dt * (nearSpot ? 1.2 : .8)));
+      god.position.set(gp.x, gp.y + Math.sin(t * 1.3) * .45, gp.z);
+      const vel = gp.clone().sub(prev);
+      const face = (nearSpot || talking) ? Math.atan2(pl.x - gp.x, pl.z - gp.z) : Math.atan2(vel.x, vel.z);
+      god.rotation.y += (nearestAngle(god.rotation.y, face) - god.rotation.y) * Math.min(1, dt * 2.5);
+      god.rotation.z = (nearSpot ? 0 : -.12) + Math.sin(t * .9) * .04;
+      const u = god.userData;
+      u.cloud.rotation.y = t * .4; u.curls.forEach((c, i) => (c.rotation.z = t * (.6 + i * .2)));
+      u.beard.rotation.x = Math.sin(t * 1.7) * .06; u.sleeveL.rotation.z = .25 + Math.sin(t * 1.4) * .06;
+      const bless = talking || nearSpot;
+      u.handR.rotation.z = bless ? -2.0 + Math.sin(t * 3) * .25 : -.7 + Math.sin(t * 1.2) * .08;
+      u.head.rotation.x = Math.sin(t * .8) * .06 + (bless ? Math.max(0, Math.sin(t * 2)) * .12 : 0);
+      u.halo.rotation.z = t * .5; u.haloGlow.material.opacity = .35 + Math.sin(t * 2) * .1;
+      spark(god.position, dt, bless);
+      const n = W.npcs.find(x => x.id === 'god'); if (n) n.pos.copy(god.position).setY(god.position.y - 4);
     });
-    // 白鬍子
-    M(new T.ConeGeometry(.75, 1.9, 16), '#ffffff', { y: -.95, z: .45, rx: Math.PI + .25, parent: head, ol: .05 });
-    M(sph(.5, 1), '#ffffff', { y: -.35, z: .7, s: [1.4, .7, .8], parent: head, ol: .04 });
-    // 頭巾帽
-    M(new T.SphereGeometry(1.0, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2.4), '#8fbf7a', { y: .12, parent: head, ol: .05 });
-    M(sph(.22, 1), '#ffd166', { y: 1.05, parent: head, ol: .03 });
-    // 木杖＋葉子
-    const staff = G(g, 1.6, 1.2, .4); g.userData.staff = staff;
-    M(cyl(.09, .11, 4.6, 8), '#a8794f', { y: 1.6, parent: staff, ol: .03 });
-    M(sph(.4, 1), '#8fd18a', { y: 4, s: [1.2, .8, 1], parent: staff, ol: .04 });
-    M(sph(.28, 1), '#ffb84d', { x: .3, y: 3.5, parent: staff, ol: .03 });          // 葫蘆
-    // 右手
-    M(new T.CapsuleGeometry(.2, .9, 4, 8), '#efe6ff', { x: 1.15, y: 2.4, rz: -.8, parent: g, ol: .03 });
-    // 揮手
-    const hand = G(g, -1.0, 2.6, .1); g.userData.hand = hand;
-    M(new T.CapsuleGeometry(.2, .9, 4, 8), '#efe6ff', { y: .55, parent: hand, ol: .03 });
-    M(sph(.22, 1), '#ffe2cc', { y: 1.15, parent: hand, ol: .03 });
+  }
+
+  // 祝福光點（金色、葉綠色光粒子從山神身上飄散）
+  function buildBlessing() {
+    const N = 120, geo = new T.BufferGeometry(), p = new Float32Array(N * 3), col = new Float32Array(N * 3), life = new Float32Array(N), vel = [];
+    const ca = new T.Color('#ffe08a'), cb = new T.Color('#b9f5c8');
+    for (let i = 0; i < N; i++) { life[i] = 0; vel.push(new V3()); const c = i % 3 ? ca : cb; col.set([c.r, c.g, c.b], i * 3); }
+    geo.setAttribute('position', new T.BufferAttribute(p, 3)); geo.setAttribute('color', new T.BufferAttribute(col, 3));
+    const pts = new T.Points(geo, new T.PointsMaterial({ size: .45, map: dotTex(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    pts.frustumCulled = false; W.scene.add(pts);
+    let acc = 0, idx = 0;
+    return (origin, dt, strong) => {
+      acc += dt * (strong ? 60 : 18);
+      while (acc > 1) { acc--; const i = idx++ % N; life[i] = 1;
+        p.set([origin.x + rnd(-1.5, 1.5), origin.y + rnd(-.5, 3), origin.z + rnd(-1.5, 1.5)], i * 3);
+        vel[i].set(rnd(-1, 1), strong ? rnd(-2.5, -.5) : rnd(-.3, .6), rnd(-1, 1)).multiplyScalar(strong ? 2 : 1); }
+      for (let i = 0; i < N; i++) { if (life[i] <= 0) { p[i * 3 + 1] = -999; continue; } life[i] -= dt * .5;
+        p[i * 3] += vel[i].x * dt; p[i * 3 + 1] += vel[i].y * dt; p[i * 3 + 2] += vel[i].z * dt; }
+      geo.attributes.position.needsUpdate = true;
+    };
+  }
+
+  // 山神爺爺（精修：玉綠外袍金邊、寬袖、慈眉長鬚、髮髻玉簪、葉冠、光環、虯曲木杖、祥雲座）
+  function makeMountainGod() {
+    const g = G(null); g.scale.setScalar(2.3);
+    const robe = '#8fd0b2', robeD = '#6fb898', inner = '#fbf6ea', gold = '#e8c66a', skin = '#ffe2cc';
+    // 祥雲
+    const cloud = G(g, 0, -.2, 0); g.userData.cloud = cloud;
+    [[0, 0, 0, 1.25], [1.15, -.1, .2, .9], [-1.15, -.1, .15, .95], [.5, -.2, 1, .75], [-.6, -.2, .95, .75], [0, -.25, -1, .85], [1.6, -.3, -.6, .6], [-1.7, -.3, -.5, .6]]
+      .forEach(([x, y, z, r]) => M(sph(r, 3), '#ffffff', { x, y, z, parent: cloud, ol: .05, mat: toon('#ffffff', { emissive: '#eaf2ff', emissiveIntensity: .3 }) }));
+    const curls = [];
+    [[1.5, .35, .6, 0], [-1.5, .35, .5, Math.PI], [0, .3, -1.4, Math.PI / 2]].forEach(([x, y, z, r]) => {
+      const c = new T.Mesh(new T.TorusGeometry(.45, .1, 8, 24, Math.PI * 1.5), toon('#dfeefc')); c.position.set(x, y, z); c.rotation.y = r; cloud.add(c); outline(c, .03); curls.push(c); });
+    g.userData.curls = curls;
+    const tail = M(sph(.6, 2), '#ffffff', { x: -.2, y: -.4, z: -2.1, s: [.7, .5, 1.6], parent: g, ol: .04 });
+    // 盤坐的下袍
+    M(sph(1.15, 3), robe, { y: .65, s: [1.25, .55, 1.05], parent: g });
+    M(new T.TorusGeometry(1.2, .07, 8, 40), gold, { y: .55, rx: Math.PI / 2, s: [1.18, 1, 1], parent: g, ol: 0 });
+    // 上身（內白衣＋外袍交領）
+    const torso = new T.LatheGeometry([[0, 0], [.95, 0], [.9, .5], [.78, 1.1], [.55, 1.55], [.35, 1.7], [0, 1.72]].map(([x, y]) => new T.Vector2(x, y)), 28);
+    M(torso, robe, { y: .9, parent: g });
+    const lap = new T.Mesh(new T.PlaneGeometry(.7, 1.3), toon(inner, { side: T.DoubleSide })); lap.position.set(0, 1.85, .72); lap.rotation.x = -.35; g.add(lap);
+    [-1, 1].forEach(s => { tube(g, new V3(s * .55, 2.55, .45), new V3(s * .05, 1.3, .86), .07, gold, .01); });
+    M(new T.TorusGeometry(.86, .1, 8, 30), '#e88a7a', { y: 1.42, rx: Math.PI / 2, parent: g, ol: .02 });      // 腰帶
+    M(sph(.16, 1), '#e88a7a', { y: 1.4, z: .86, parent: g, ol: .02 });
+    [-1, 1].forEach(s => M(box(.12, .55, .04), '#e88a7a', { x: s * .1, y: 1.1, z: .88, rz: s * .15, parent: g, ol: 0 }));
+    // 寬袖手臂
+    const sleeveL = G(g, -.75, 2.35, .1); g.userData.sleeveL = sleeveL; sleeveL.rotation.z = .25;
+    M(cyl(.22, .55, 1.3, 18), robe, { y: -.6, rx: -.5, parent: sleeveL, ol: .03 }); M(new T.TorusGeometry(.53, .05, 6, 20), gold, { y: -1.2, z: .35, rx: Math.PI / 2 - .5, parent: sleeveL, ol: 0 });
+    M(sph(.2, 2), skin, { y: -1.15, z: .55, parent: sleeveL, ol: .02 });
+    const handR = G(g, .75, 2.35, .1); g.userData.handR = handR;
+    M(cyl(.22, .5, 1.2, 18), robe, { y: -.55, parent: handR, ol: .03 }); M(new T.TorusGeometry(.48, .05, 6, 20), gold, { y: -1.12, rx: Math.PI / 2, parent: handR, ol: 0 });
+    M(sph(.21, 2), skin, { y: -1.2, s: [1, 1.15, .6], parent: handR, ol: .02 });
+    // 頭
+    const head = G(g, 0, 3.25, .1); g.userData.head = head;
+    M(sph(.82, 4), skin, { s: [1, 1.08, .98], parent: head });
+    M(sph(.5, 3), skin, { y: .55, z: .1, s: [1.1, .8, .9], parent: head, ol: 0 });            // 壽星額
+    [-1, 1].forEach(s => M(sph(.18, 2), skin, { x: s * .8, y: 0, s: [.5, 1, .8], parent: head, ol: .02 }));
+    M(sph(.13, 2), '#ffc9b0', { y: -.08, z: .82, parent: head, ol: .01 });                  // 鼻
+    [-1, 1].forEach(s => {
+      const eye = new T.Mesh(new T.TorusGeometry(.13, .035, 6, 16, Math.PI), toon('#4a3a3a')); eye.position.set(s * .3, .12, .74); head.add(eye);
+      const brow = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([new V3(s * .1, .32, .8), new V3(s * .38, .38, .72), new V3(s * .62, .18, .55), new V3(s * .78, -.2, .4)]), 16, .07, 6), toon('#ffffff'));
+      head.add(brow); outline(brow, .02);
+      M(sph(.15, 1), '#ffb3c1', { x: s * .48, y: -.15, z: .64, s: [1, .6, .5], parent: head, ol: 0 });
+      const mus = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([new V3(0, -.24, .86), new V3(s * .25, -.28, .82), new V3(s * .48, -.42, .66), new V3(s * .6, -.68, .5)]), 16, .075, 6), toon('#ffffff'));
+      head.add(mus); outline(mus, .02);
+    });
+    const smile = new T.Mesh(new T.TorusGeometry(.14, .025, 6, 14, Math.PI), toon('#b0645a')); smile.position.set(0, -.36, .8); smile.rotation.z = Math.PI; head.add(smile);
+    // 長鬚（三綹，會隨風擺）
+    const beard = G(head, 0, -.4, .55); g.userData.beard = beard;
+    [[0, 1.5, .34], [-.24, 1.15, .24], [.24, 1.15, .24]].forEach(([x, h, r]) => M(new T.ConeGeometry(r, h, 12), '#ffffff', { x, y: -h / 2, z: .1, rx: Math.PI + .12, parent: beard, ol: .03 }));
+    // 白髮與髮髻、玉簪、葉冠
+    M(new T.SphereGeometry(.86, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2.6), '#f4f4f4', { y: .12, z: -.1, rx: -.35, parent: head, ol: .02 });
+    M(sph(.32, 2), '#f4f4f4', { y: 1.0, z: -.2, parent: head, ol: .03 });
+    M(cyl(.04, .04, 1.1, 6), '#7fd1b0', { y: 1.0, z: -.2, rz: Math.PI / 2, parent: head, ol: .02 });
+    for (let i = 0; i < 9; i++) { const a = -Math.PI * .85 + i / 8 * Math.PI * .7 + Math.PI / 2;
+      M(sph(.13, 1), i % 2 ? '#8fcf86' : '#a8e09a', { x: Math.cos(a) * .82, y: .55, z: Math.sin(a) * .82 - .05, s: [.6, 1.4, .35], ry: -a, rz: .3, parent: head, ol: .015 }); }
+    // 光環
+    const halo = new T.Mesh(new T.TorusGeometry(1.25, .05, 8, 48), new T.MeshBasicMaterial({ color: '#ffe08a' })); halo.position.set(0, .25, -.6); head.add(halo); g.userData.halo = halo;
+    const gc = document.createElement('canvas'); gc.width = gc.height = 128; const gx = gc.getContext('2d'); const rg = gx.createRadialGradient(64, 64, 10, 64, 64, 64);
+    rg.addColorStop(0, 'rgba(255,240,180,.9)'); rg.addColorStop(1, 'rgba(255,240,180,0)'); gx.fillStyle = rg; gx.fillRect(0, 0, 128, 128);
+    const glow = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(gc), transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: .4 }));
+    glow.scale.set(3.4, 3.4, 1); glow.position.set(0, .25, -.7); head.add(glow); g.userData.haloGlow = glow;
+    // 虯曲木杖＋葫蘆＋綵帶
+    const staffC = new T.CatmullRomCurve3([new V3(-1.15, .2, .55), new V3(-1.25, 1.4, .6), new V3(-1.1, 2.6, .55), new V3(-1.3, 3.6, .5), new V3(-1.05, 4.3, .5), new V3(-.8, 4.5, .55)]);
+    const staff = new T.Mesh(new T.TubeGeometry(staffC, 40, .08, 8), toon('#9c7048')); staff.castShadow = true; g.add(staff); outline(staff, .02);
+    const gourd = G(g, -.85, 4.05, .6);
+    M(sph(.2, 2), '#f2b04a', { parent: gourd, ol: .02 }); M(sph(.14, 2), '#f2b04a', { y: .26, parent: gourd, ol: .02 }); M(cyl(.15, .15, .04, 12), '#e04e4e', { y: .14, parent: gourd, ol: 0 });
+    for (let i = 0; i < 4; i++) M(sph(.1, 1), '#8fcf86', { x: -.8 + Math.cos(i) * .18, y: 4.55, z: .55 + Math.sin(i) * .18, s: [.6, 1.3, .35], rz: i, parent: g, ol: .01 });
+    const ribbon2 = new T.Mesh(new T.PlaneGeometry(.12, .9, 1, 6), toon('#e88a7a', { side: T.DoubleSide })); ribbon2.position.set(-.95, 3.7, .6); g.add(ribbon2);
     return g;
   }
 
@@ -1030,7 +1477,7 @@
       if (Math.abs(r - LOOP_R) < 7) continue;
       if (zonesXY.some(([zx, zz]) => Math.hypot(x - zx, z - zz) < 23)) continue;
       if (nearRiver(x, z) < RIVER_W / 2 + 7) continue;
-      if (Math.hypot(x, z + 94) < 40) continue;
+      if (Math.hypot(x - MT.x, z - MT.z) < 50) continue;
       if (Math.hypot(x + 20, z + 14) < 10) continue;
       if (onSpokes(x, z)) continue;
       if (Math.abs(x - (-40)) < 9 && z > 30) continue;  // 支線
@@ -1051,28 +1498,36 @@
     let tries = 0;
     while (pts.length < N && tries < 6000) { tries++;
       const a = rnd(0, Math.PI * 2), r = rnd(60, 150), x = Math.sin(a) * r, z = Math.cos(a) * r;
-      if (window.ZONES.some(({ pos: [zx, zz] }) => Math.hypot(x - zx, z - zz) < 22)) continue;
+      if (window.ZONES.some(({ pos: [zx, zz] }) => Math.hypot(x - zx, z - zz) < 24)) continue;
       if (nearRiver(x, z) < RIVER_W / 2 + 4) continue;
-      if (Math.hypot(x, z + 94) < 36) continue;
+      if (Math.hypot(x - MT.x, z - MT.z) < 48) continue;
       if (Math.abs(x + 42) < 7 && z > 30) continue;
       if (W.colliders.some(c => Math.hypot(x - c.x, z - c.z) < c.r + 2)) continue;
-      pts.push([x, z, rnd(.8, 1.5)]);
+      pts.push([x, 0, z, rnd(.8, 1.5), Math.random() * .7]);
     }
-    const trunkG = cyl(.25, .38, 3, 6), crownG = sph(1.9, 1);
+    instTrees(pts);
+  }
+  // Instanced 樹林：圓冠闊葉樹＋少量針葉樹，含描邊
+  function instTrees(pts) {
+    const round = pts.filter(p => p[4] < .8), pine = pts.filter(p => p[4] >= .8);
+    const trunkG = cyl(.25, .38, 3, 6), crownG = sph(1.9, 1), coneG = new T.ConeGeometry(1.6, 4.2, 7);
+    const q = new T.Quaternion(), m = new T.Matrix4();
     const tr = new T.InstancedMesh(trunkG, toon('#b08a6e'), pts.length);
-    const cr = new T.InstancedMesh(crownG, W.leafMats[1], pts.length);
-    const cr2 = new T.InstancedMesh(crownG, W.leafMats[2], pts.length);
-    const ol = new T.InstancedMesh(crownG, outlineMat, pts.length * 2);
-    const m = new T.Matrix4(), q = new T.Quaternion();
-    pts.forEach(([x, z, s], i) => {
-      m.compose(new V3(x, 1.5 * s, z), q, new V3(s, s, s)); tr.setMatrixAt(i, m);
-      m.compose(new V3(x, 4.2 * s, z), q, new V3(s, s * .95, s)); cr.setMatrixAt(i, m);
-      m.compose(new V3(x, 4.2 * s, z), q, new V3(s * 1.06, s * 1.01, s * 1.06)); ol.setMatrixAt(i * 2, m);
-      m.compose(new V3(x + .9 * s, 3.4 * s, z + .5 * s), q, new V3(s * .65, s * .6, s * .65)); cr2.setMatrixAt(i, m);
-      m.compose(new V3(x + .9 * s, 3.4 * s, z + .5 * s), q, new V3(s * .72, s * .66, s * .72)); ol.setMatrixAt(i * 2 + 1, m);
+    const cr = new T.InstancedMesh(crownG, W.leafMats[1], round.length), cr2 = new T.InstancedMesh(crownG, W.leafMats[2], round.length);
+    const ol = new T.InstancedMesh(crownG, outlineMat, round.length * 2);
+    const pn = new T.InstancedMesh(coneG, toon('#5f9f72'), Math.max(1, pine.length)), pol = new T.InstancedMesh(coneG, outlineMat, Math.max(1, pine.length));
+    pn.count = pol.count = pine.length;
+    pts.forEach(([x, y, z, s], i) => { m.compose(new V3(x, y + 1.5 * s, z), q, new V3(s, s, s)); tr.setMatrixAt(i, m); });
+    round.forEach(([x, y, z, s], i) => {
+      m.compose(new V3(x, y + 4.2 * s, z), q, new V3(s, s * .95, s)); cr.setMatrixAt(i, m);
+      m.compose(new V3(x, y + 4.2 * s, z), q, new V3(s * 1.06, s * 1.01, s * 1.06)); ol.setMatrixAt(i * 2, m);
+      m.compose(new V3(x + .9 * s, y + 3.4 * s, z + .5 * s), q, new V3(s * .65, s * .6, s * .65)); cr2.setMatrixAt(i, m);
+      m.compose(new V3(x + .9 * s, y + 3.4 * s, z + .5 * s), q, new V3(s * .72, s * .66, s * .72)); ol.setMatrixAt(i * 2 + 1, m);
     });
-    [tr, cr, cr2].forEach(o => { o.castShadow = true; o.receiveShadow = true; W.scene.add(o); });
-    W.scene.add(ol); outlineList.push(ol);
+    pine.forEach(([x, y, z, s], i) => { m.compose(new V3(x, y + 4.4 * s, z), q, new V3(s, s, s)); pn.setMatrixAt(i, m);
+      m.compose(new V3(x, y + 4.4 * s, z), q, new V3(s * 1.08, s * 1.04, s * 1.08)); pol.setMatrixAt(i, m); });
+    [tr, cr, cr2, pn].forEach(o => { o.castShadow = true; o.receiveShadow = true; W.scene.add(o); });
+    [ol, pol].forEach(o => { W.scene.add(o); outlineList.push(o); });
   }
   function onSpokes(x, z) {
     return window.ZONES.some(zn => { if (zn.id === 'hub') return false;
@@ -1203,6 +1658,7 @@
     W.leafMats.forEach((m, i) => m.color.set(s.leaf[i]));
     if (W.particleMat) W.particleMat.color.set(s.part);
     W.scene.fog.color.set(s.fog);
+    waterMats.forEach(m => m.uniforms.uSky && m.uniforms.uSky.value.set(s.sky[1]));
     const u = W.skyMat.uniforms; u.top.value.set(s.sky[0]); u.mid.value.set(s.sky[1]); u.bot.value.set(s.sky[2]);
     W.panoMat.uniforms.haze.value.set(s.fog);
     W.panoMat.uniforms.tint.value.set(k === 'autumn' ? '#fff0e0' : k === 'winter' ? '#eef4ff' : '#ffffff');
@@ -1259,7 +1715,7 @@
     }
     let tgt, dist, az, el;
     if (id === 'hub') { tgt = new V3(6, 10, -2); dist = 82; az = -.12; el = .2; }
-    else if (id === 'geo') { tgt = new V3(0, 16, -84); dist = 74; az = 0; el = .14; }
+    else if (id === 'geo') { tgt = new V3(4, 18, -88); dist = 82; az = .25; el = .16; }
     else {
       tgt = new V3(x, 4, zz); dist = 46; el = .27;
       az = Math.atan2(-x, -zz);               // 相機在局本部側往外看（背景是台北全景）
@@ -1322,7 +1778,7 @@
   function updateExplore(dt) {
     if (cam.fp) { // 傳送動畫
       const k = Math.min(1, (performance.now() - cam.fp.t0) / 1200), e = k * k * (3 - 2 * k);
-      cam.pos.lerpVectors(cam.fp.from, cam.fp.to, e); cam.pos.y = 2.4 + Math.sin(e * Math.PI) * 18;
+      cam.pos.lerpVectors(cam.fp.from, cam.fp.to, e); cam.pos.y = 2.4 + hill(cam.pos.x, cam.pos.z) + Math.sin(e * Math.PI) * 18;
       cam.yaw = cam.yaw + (nearestAngle(cam.yaw, cam.fp.yawTo) - cam.yaw) * Math.min(1, dt * 5);
       if (k >= 1) cam.fp = null;
     } else {
@@ -1341,7 +1797,7 @@
       cam.pos.x = next.x; cam.pos.z = next.z;
       const speed = cam.vel.length();
       cam.bob = (cam.bob || 0) + dt * speed * .9;
-      cam.pos.y = 2.4 + Math.sin(cam.bob) * .08 * Math.min(1, speed / 8) + bridgeLift(cam.pos);
+      cam.pos.y = 2.4 + Math.sin(cam.bob) * .08 * Math.min(1, speed / 8) + bridgeLift(cam.pos) + hill(cam.pos.x, cam.pos.z);
     }
     W.camera.position.copy(cam.pos);
     const look = new V3(-Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.cos(cam.yaw) * Math.cos(cam.pitch));
@@ -1422,8 +1878,8 @@
     const out = [], w = W.renderer.domElement.clientWidth, h = W.renderer.domElement.clientHeight;
     window.ZONES.forEach(z => {
       const [x, zz] = z.pos;
-      const y = z.id === 'hub' ? 22 : z.id === 'geo' ? 40 : 11;
-      tmp.set(x, y, z.id === 'geo' ? -86 : zz).project(W.camera);
+      const y = z.id === 'hub' ? 22 : z.id === 'geo' ? 44 : 11;
+      tmp.set(x, y, z.id === 'geo' ? -96 : zz).project(W.camera);
       const dist = W.camera.position.distanceTo(new V3(x, y, zz));
       out.push({ id: z.id, x: (tmp.x + 1) / 2 * w, y: (1 - tmp.y) / 2 * h, visible: tmp.z < 1 && tmp.z > -1, dist });
     });
@@ -1440,6 +1896,8 @@
     npcWave: id => { const n = W.npcs.find(x => x.id === id); if (n) n.wave = 1.6; },
     listenerPos: () => (W.mode === 'explore' ? cam.pos : cam.target),
     riverDistance: (x, z) => nearRiver(x, z),
+    get godPos() { return W.god && W.god.position; }, get godYaw() { return W.god ? W.god.rotation.y : 0; },
+    get playgroundPos() { return W.playground; }, get fallPos() { return W.fallPos; },
     debugCam: (p, l) => { W.mode = 'debug'; W.follow = null; viewShiftGoal = 0; W.camera.position.copy(p); W.camera.lookAt(l); },
     debugFollowBike: () => { W.mode = 'debug'; viewShiftGoal = 0; W.follow = W.bikes[0]; },
     setMoveInput: (x, y) => { W.move.x = x; W.move.y = y; },

@@ -85,26 +85,42 @@
     }
   }
 
+  /* ---------- 魚躍水花聲（依距離衰減） ---------- */
+  function splash(p) {
+    if (!on || !World.listenerPos) return;
+    const l = World.listenerPos(), d = Math.hypot(l.x - p.x, l.z - p.z), vol = clamp(1 - d / 70, 0, 1) * .35;
+    if (vol < .01) return;
+    const t = ac.currentTime, s = ac.createBufferSource(); s.buffer = noiseBuf('white');
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(2600, t); f.frequency.exponentialRampToValueAtTime(700, t + .3); f.Q.value = 1.2;
+    const g = ac.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + .35);
+    s.connect(f).connect(g); pan(g, clamp((p.x - l.x) / 40, -1, 1)).connect(master); s.start(t); s.stop(t + .4);
+    const o = ac.createOscillator(), og = ac.createGain(); o.frequency.setValueAtTime(520, t); o.frequency.exponentialRampToValueAtTime(140, t + .12);
+    og.gain.setValueAtTime(vol * .6, t); og.gain.exponentialRampToValueAtTime(.001, t + .14); o.connect(og).connect(master); o.start(t); o.stop(t + .15);
+  }
+  let splashBound = false;
+
   /* ---------- 依位置調整音量 ---------- */
   function updateLevels() {
     if (!on || !window.World || !World.listenerPos) return;
     const p = World.listenerPos(), Z = id => window.ZONES.find(z => z.id === id).pos;
     const dist = (a) => Math.hypot(p.x - a[0], p.z - a[1]);
     const river = World.riverDistance(p.x, p.z);
-    const park = dist(Z('pkl')), hub = dist([0, 17]), mt = dist([0, -86]);
+    const pg = World.playgroundPos || { x: Z('pkl')[0], z: Z('pkl')[1] }, park = dist([pg.x, pg.z]), hub = dist([0, 17]), mt = dist([0, -90]);
+    const fp = World.fallPos; lv.fall = fp ? clamp(1 - dist([fp.x, fp.z]) / 30, 0, 1) : 0;
     const season = World.season;
     lv.water = clamp(1 - (river - 6) / 45, .06, 1);
     lv.birds = clamp(.45 + (1 - park / 50) * .4 + (1 - mt / 60) * .3, .3, 1) * (season === 'winter' ? .5 : 1);
     lv.insects = clamp(.3 + (1 - mt / 55) * .5 + (1 - park / 45) * .3, .2, 1) * (season === 'winter' ? .15 : 1);
     lv.kids = clamp((1 - park / 40) * .9, 0, 1) + clamp((1 - hub / 30) * .45, 0, .45);
     const t = ac.currentTime, set = (k, v) => gains[k] && gains[k].gain.setTargetAtTime(v, t, .6);
-    set('water', .32 * lv.water);
+    set('water', .32 * lv.water + .25 * lv.fall);
     set('wind', .05 + .03 * Math.sin(t * .2));
     set('cicada', (season === 'summer' ? .03 : season === 'autumn' ? .015 : 0) * lv.insects);
   }
 
   function start() {
     ctx(); if (on) return; on = true;
+    if (!splashBound && window.World && World.on) { World.on('splash', splash); splashBound = true; }
     loop('brown', 'lowpass', 800, .7, 'water');
     const wind = loop('pink', 'bandpass', 1300, .6, 'wind');
     // 蟬聲：帶通白噪音＋振幅調變

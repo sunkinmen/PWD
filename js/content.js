@@ -167,7 +167,7 @@ window.ZONES = [
     badge: '坡地・步道',
     color: '#c9984a',
     soft: '#fbefd6',
-    pos: [0, -64],
+    pos: [0, -52],
     subtitle: '與「山神爺爺」一起守護全市山坡地與溪溝安全，串聯臺北大縱走山徑，引領市民親山近自然。',
     officialUrl: 'https://geo.gov.taipei/',
     metrics: [
