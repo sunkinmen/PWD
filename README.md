@@ -119,3 +119,19 @@ pwd3d/
 - 數據與公告為示意內容，上線前請各處確認。
 - 「烏龜工程師」「山神爺爺」為原創角色。
 - 服務連結目前多指向各處官網首頁，可逐一換成實際服務頁網址。
+
+## v3 視覺與介面升級（十項）
+| # | 項目 | 位置 | 維護方式 |
+|---|---|---|---|
+| 1 | 後製：Bloom、景深、ACES 色調、暖色調色、暗角 | `world.js` → `buildPost / setPost` | 選單「畫質」切換；省電模式自動關閉 |
+| 2 | NPC 3D Q 版角色（對應立繪服裝、說話嘴型、揮手） | `world.js` → `makeNPC / OUTFIT` | 新增角色：在 `OUTFIT` 加一組顏色 |
+| 3 | 手繪草地／步道材質、草叢、落葉 | `world.js` → `buildGroundDetail` | — |
+| 4 | 日夜循環（清晨／白天／黃昏／夜晚；夜間窗燈、路燈光暈、星空） | `world.js` → `TOD / setTime` | 選單「時段」；自動依現在時間 |
+| 5 | 統一 SVG 圖示系統（24px、2px 圓角線稿） | `js/icons.js` | HTML 寫 `<i data-ico="名稱"></i>`；新增圖示在 `P` 物件加路徑 |
+| 6 | 世界轉場：雲朵擦拭＋每處專屬三音和弦 | `ui.js wipe()`、`audio.js stinger()` | 和弦在 `STING` 調整 |
+| 7 | 視覺小說式對話：大立繪＋表情（開心／一般／擔心）自動切換 | `ui.js setMood()` | 立繪檔 `assets/npc/<id>.jpg`、`<id>-happy.jpg`、`<id>-worried.jpg`；關鍵字在 `WORRY / HAPPY` |
+| 8 | 資訊卡：指標圖示＋趨勢箭頭、公告分類色條＋縮圖、手機上拉面板 | `ui.js select()` | `content.js` 指標加 `ico`、`trend: 'up'/'flat'`；分類顏色在 `TAGC` |
+| 9 | 工務護照集章、集滿山神祝福＋彩紙、下載紀念卡 PNG | `ui.js openStamps / celebrate / downloadCert` | 走近各處或開啟資訊面板即蓋章 |
+| 10 | 第三人稱＋選擇男／女工程師角色 | 選單「視角」「我的角色」 | `world.js setAvatar / setView` |
+
+表情立繪以 Gemini Nano Banana 2 生成（4×2 拼圖自動切割），更換時保持相同檔名即可。

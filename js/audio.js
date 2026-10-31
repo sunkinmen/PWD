@@ -144,6 +144,23 @@
   function blip(f = 600) { if (!ac || !on) return; const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = f;
     g.gain.setValueAtTime(.05, ac.currentTime); g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + .12); o.connect(g).connect(master); o.start(); o.stop(ac.currentTime + .13); }
 
+
+  /* ---------- 轉場音效（每個世界一段專屬三音和弦）／蓋章／慶祝 ---------- */
+  const STING = { hub: [523, 659, 784], nco: [440, 554, 659], heo: [392, 494, 587], pkl: [587, 740, 880], sso: [349, 440, 523], geo: [330, 415, 494] };
+  function note(f, t0, dur, type = 'triangle', vol = .06) {
+    const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .02); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    o.connect(g).connect(master); o.start(t0); o.stop(t0 + dur + .05);
+  }
+  function stinger(id) { if (!ac || !on) return; const t = ac.currentTime + .02; (STING[id] || STING.hub).forEach((f, i) => { note(f, t + i * .085, .5); note(f * 2, t + i * .085, .25, 'sine', .02); });
+    // 輕柔「咻」：濾波白噪音掃頻
+    const b = ac.createBuffer(1, ac.sampleRate * .6, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); s.buffer = b; f.type = 'bandpass'; f.Q.value = 2;
+    f.frequency.setValueAtTime(400, t); f.frequency.exponentialRampToValueAtTime(3200, t + .5); g.gain.value = .05; s.connect(f).connect(g).connect(master); s.start(t); }
+  function stamp() { if (!ac || !on) return; const t = ac.currentTime; note(140, t, .18, 'sine', .25); note(90, t, .25, 'sine', .2); note(1320, t + .12, .3, 'triangle', .03); }
+  function fanfare() { if (!ac || !on) return; const t = ac.currentTime + .05;
+    [[523, 0], [659, .14], [784, .28], [1047, .42], [784, .62], [1047, .76]].forEach(([f, d]) => { note(f, t + d, .45, 'triangle', .07); note(f / 2, t + d, .45, 'sine', .04); }); }
+
   /* ---------- NPC 語音 ---------- */
   let voices = [], voiceOn = true, current = null;
   const loadVoices = () => { voices = ('speechSynthesis' in window) ? speechSynthesis.getVoices() : []; };
@@ -177,5 +194,5 @@
   }
   function stopVoice() { if (current) { current.pause(); current = null; } if ('speechSynthesis' in window) speechSynthesis.cancel(); }
 
-  window.Sound = { start, stop, blip, say, stopVoice, get on() { return on; }, setVoice: v => { voiceOn = v; if (!v) stopVoice(); }, get voiceOn() { return voiceOn; } };
+  window.Sound = { start, stop, blip, stinger, stamp, fanfare, say, stopVoice, get on() { return on; }, setVoice: v => { voiceOn = v; if (!v) stopVoice(); }, get voiceOn() { return voiceOn; } };
 })();

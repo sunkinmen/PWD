@@ -63,7 +63,7 @@
   </main>
 
   <!-- 節慶／防汛提示 -->
-  <div id="festival" role="note" hidden><span id="festival-text"></span><button onclick="this.parentNode.hidden=true" data-i18n-aria="close">✕</button></div>
+  <div id="festival" role="note" hidden><span id="festival-text"></span><button onclick="this.parentNode.hidden=true" data-i18n-aria="close"><i data-ico="close"></i></button></div>
 
   <!-- HUD -->
   <div id="hud" hidden>
@@ -74,11 +74,12 @@
       </button>
       <div class="top-right">
         <span class="clock" id="clock" aria-hidden="true">--:--</span>
-        <button class="icon-btn btn-tasks" onclick="UI.openTasks()"><span aria-hidden="true">📝</span><em data-i18n="tasks">我要辦</em></button>
-        <button class="icon-btn" onclick="UI.toggleMode()" id="btn-mode"><span id="mode-ico" aria-hidden="true">🚶</span><em id="mode-txt" data-i18n="explore">探索</em></button>
-        <button class="icon-btn" onclick="UI.openSearch()" data-i18n-aria="searchTitle">⌕</button>
-        <button class="icon-btn" onclick="UI.toggleSound()" aria-label="環境音" id="btn-sound">🔈</button>
-        <button class="icon-btn" onclick="UI.openMenu()" data-i18n-aria="settings">☰</button>
+        <button class="icon-btn btn-tasks" onclick="UI.openTasks()"><i data-ico="tasks"></i><em data-i18n="tasks">我要辦</em></button>
+        <button class="icon-btn btn-stamps" onclick="UI.openStamps()" data-i18n-aria="stamps"><i data-ico="stamp"></i><b id="stamp-count">0/6</b></button>
+        <button class="icon-btn" onclick="UI.toggleMode()" id="btn-mode"><span id="mode-ico" aria-hidden="true"><i data-ico="walk"></i></span><em id="mode-txt" data-i18n="explore">探索</em></button>
+        <button class="icon-btn" onclick="UI.openSearch()" data-i18n-aria="searchTitle"><i data-ico="search"></i></button>
+        <button class="icon-btn" onclick="UI.toggleSound()" aria-label="環境音" id="btn-sound"><i data-ico="soundOff"></i></button>
+        <button class="icon-btn" onclick="UI.openMenu()" data-i18n-aria="settings"><i data-ico="menu"></i></button>
       </div>
     </header>
 
@@ -87,6 +88,7 @@
 
     <!-- 世界資訊（總覽模式） -->
     <section id="hero" aria-live="polite">
+      <button class="hero-grip" onclick="UI.toggleHero()" data-i18n-aria="moreInfo"><i></i></button>
       <div class="hero-badge"><span id="hero-badge"></span><span id="hero-visited" class="visited" hidden data-i18n="visited">✓ 已造訪</span></div>
       <h2 id="hero-title"></h2>
       <p id="hero-tagline" class="tagline"></p>
@@ -94,7 +96,7 @@
       <div class="hero-actions">
         <button class="btn btn-primary" onclick="UI.enterZone()" data-i18n="enter">▶ 進入世界</button>
         <button class="btn btn-glass" onclick="UI.openSheet()" data-i18n="servicesNews">服務與公告</button>
-        <button class="btn btn-ghost" onclick="UI.share()"><span aria-hidden="true">🔗</span> <span data-i18n="share">分享</span></button>
+        <button class="btn btn-ghost" onclick="UI.share()"><i data-ico="share"></i> <span data-i18n="share">分享</span></button>
         <a class="btn btn-ghost" id="hero-link" target="_blank" rel="noopener" data-i18n="website">官網 ↗</a>
       </div>
       <div class="cards" id="hero-cards"></div>
@@ -105,10 +107,12 @@
       <canvas id="minimap" width="180" height="180" aria-hidden="true"></canvas>
       <button id="prompt" hidden><span class="kbd">E</span><span id="prompt-text"></span></button>
       <div id="npc-bubble" hidden onclick="UI.nextLine()" role="button" tabindex="0">
-        <img id="npc-avatar" alt="" onerror="this.hidden=true">
-        <div class="npc-head"><b id="npc-name"></b><small id="npc-role"></small></div>
-        <p id="npc-text" aria-live="polite"></p>
-        <span class="npc-next" data-i18n="npcNext">點我或按 E 繼續 ▸</span>
+        <div class="vn-portrait"><img id="npc-avatar" alt="" onerror="this.hidden=true"></div>
+        <div class="vn-box">
+          <div class="npc-head"><b id="npc-name"></b><small id="npc-role"></small></div>
+          <p id="npc-text" aria-live="polite"></p>
+          <span class="npc-next"><span data-i18n="npcNext">點我或按 E 繼續</span> <i class="vn-arrow">▼</i></span>
+        </div>
       </div>
       <p class="hint" id="hint" data-i18n="hint">WASD／方向鍵移動・Shift 奔跑・拖曳轉視角</p>
       <div id="joystick" aria-hidden="true"><i></i></div>
@@ -120,7 +124,7 @@
     <div class="sheet-head">
       <span class="sheet-emblem" id="sheet-emblem" aria-hidden="true"></span>
       <div><small id="sheet-badge"></small><h3 id="sheet-title"></h3></div>
-      <button class="icon-btn" onclick="UI.closeSheet()" data-i18n-aria="close">✕</button>
+      <button class="icon-btn" onclick="UI.closeSheet()" data-i18n-aria="close"><i data-ico="close"></i></button>
     </div>
     <div class="sheet-body">
       <h4 data-i18n="services">常用服務</h4>
@@ -134,7 +138,7 @@
   <!-- 選單 -->
   <div class="modal" id="menu" role="dialog" aria-modal="true" aria-labelledby="menu-h" hidden>
     <div class="modal-card">
-      <div class="modal-head"><h3 id="menu-h" data-i18n="settings">設定</h3><button class="icon-btn" onclick="UI.close('menu')" data-i18n-aria="close">✕</button></div>
+      <div class="modal-head"><h3 id="menu-h" data-i18n="settings">設定</h3><button class="icon-btn" onclick="UI.close('menu')" data-i18n-aria="close"><i data-ico="close"></i></button></div>
       <h4 data-i18n="lang">語言 Language</h4>
       <div class="seg" id="seg-lang"><button data-v="zh">中文</button><button data-v="en">English</button></div>
       <h4 data-i18n="season">季節</h4>
@@ -151,11 +155,18 @@
       <div class="seg" id="seg-quality">
         <button data-v="auto" data-i18n="auto">自動</button><button data-v="high" data-i18n="high">高畫質</button><button data-v="eco" data-i18n="eco">省電</button>
       </div>
+      <h4 data-i18n="timeOfDay">時段（日夜）</h4>
+      <div class="seg" id="seg-time"><button data-v="auto" data-i18n="auto">自動</button><button data-v="dawn" data-i18n="dawn">清晨</button><button data-v="day" data-i18n="day">白天</button><button data-v="dusk" data-i18n="dusk">黃昏</button><button data-v="night" data-i18n="night">夜晚</button></div>
+      <h4 data-i18n="viewMode">視角</h4>
+      <div class="seg" id="seg-view"><button data-v="first" data-i18n="firstP">第一人稱</button><button data-v="third" data-i18n="thirdP">第三人稱</button></div>
+      <h4 data-i18n="avatar">我的角色</h4>
+      <div class="seg avatar-seg" id="seg-avatar"><button data-v="m"><span class="av-chip m"></span><span data-i18n="avatarM">男工程師</span></button><button data-v="f"><span class="av-chip f"></span><span data-i18n="avatarF">女工程師</span></button></div>
       <h4 data-i18n="more">其他</h4>
       <div class="menu-list">
         <button onclick="UI.close('menu');UI.openA11y()" data-i18n="a11yMode">♿ 純文字無障礙版</button>
         <button onclick="UI.close('menu');UI.showHelp()" data-i18n="help">🎮 操作說明</button>
         <button onclick="UI.close('menu');UI.startTour(true)" data-i18n="tour">🧭 重看新手導覽</button>
+        <button onclick="UI.close('menu');UI.openStamps()" data-i18n="stampsMenu">🏅 工務護照（集章）</button>
         <a href="brand.html" target="_blank" data-i18n="brand">🎨 品牌設計規範</a>
         <a id="menu-official" target="_blank" rel="noopener" data-i18n="official">🏛️ 工務局官方網站 ↗</a>
       </div>
@@ -166,7 +177,7 @@
   <!-- 我要辦 -->
   <div class="modal" id="tasks" role="dialog" aria-modal="true" aria-labelledby="tasks-h" hidden>
     <div class="modal-card">
-      <div class="modal-head"><h3 id="tasks-h" data-i18n="tasksTitle">我要辦…</h3><button class="icon-btn" onclick="UI.close('tasks')" data-i18n-aria="close">✕</button></div>
+      <div class="modal-head"><h3 id="tasks-h" data-i18n="tasksTitle">我要辦…</h3><button class="icon-btn" onclick="UI.close('tasks')" data-i18n-aria="close"><i data-ico="close"></i></button></div>
       <div id="tasks-list" class="tasks-list"></div>
     </div>
   </div>
@@ -174,7 +185,7 @@
   <!-- 搜尋 -->
   <div class="modal" id="search" role="dialog" aria-modal="true" aria-labelledby="search-h" hidden>
     <div class="modal-card">
-      <div class="modal-head"><h3 id="search-h" data-i18n="searchTitle">想找什麼服務？</h3><button class="icon-btn" onclick="UI.close('search')" data-i18n-aria="close">✕</button></div>
+      <div class="modal-head"><h3 id="search-h" data-i18n="searchTitle">想找什麼服務？</h3><button class="icon-btn" onclick="UI.close('search')" data-i18n-aria="close"><i data-ico="close"></i></button></div>
       <input id="search-input" type="search" data-i18n-ph="searchPh" aria-labelledby="search-h" autocomplete="off">
       <div id="search-results" class="search-results"></div>
     </div>
@@ -199,6 +210,33 @@
   </section>
   <noscript><div class="a11y-inner"><h1>臺北市政府工務局</h1><p>本網站以 3D 呈現工務局與新建工程處、水利工程處、公園路燈工程管理處、衛生下水道工程處、大地工程處。請開啟 JavaScript，或前往 <a href="https://pwd.gov.taipei/">工務局官方網站</a>。</p></div></noscript>
 
+  <!-- 工務護照（集章） -->
+  <div class="modal" id="stamps" role="dialog" aria-modal="true" aria-labelledby="stamps-h" hidden>
+    <div class="modal-card passport">
+      <div class="modal-head"><h3 id="stamps-h" data-i18n="stampsTitle">臺北工務護照</h3><button class="icon-btn" onclick="UI.close('stamps')" data-i18n-aria="close"><i data-ico="close"></i></button></div>
+      <p class="fine" data-i18n="stampsHint">走進每個工程世界、靠近處本部就能蓋章。六枚集滿，山神爺爺會親自祝福你！</p>
+      <div class="stamp-grid" id="stamp-grid"></div>
+      <div class="cert-row" id="cert-row" hidden>
+        <input id="cert-name" maxlength="16" data-i18n-ph="certPh" aria-label="姓名">
+        <button class="btn btn-primary" onclick="UI.downloadCert()"><i data-ico="download"></i> <span data-i18n="certDl">下載紀念卡</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 世界轉場（雲朵擦拭） -->
+  <div id="wipe" aria-hidden="true"><div class="wipe-clouds"></div><div class="wipe-emblem" id="wipe-emblem"></div><b id="wipe-name"></b></div>
+
+  <!-- 集滿慶祝 -->
+  <div id="celebrate" role="dialog" aria-modal="true" aria-labelledby="cele-h" hidden>
+    <canvas id="confetti"></canvas>
+    <div class="cele-card">
+      <img src="assets/npc/god-happy.jpg" alt="" class="cele-god">
+      <h3 id="cele-h" data-i18n="celeTitle">恭喜集滿六枚工務章！</h3>
+      <p data-i18n="celeText">山神爺爺：「你走遍了道路、河川、公園、下水道和山林，臺北因為有你這樣關心市政的人，會更美好。老夫在此賜福！」</p>
+      <div class="tour-actions"><button class="btn btn-ghost" onclick="UI.closeCelebrate()" data-i18n="later">稍後</button><button class="btn btn-primary" onclick="UI.closeCelebrate();UI.openStamps()" data-i18n="getCert">領取紀念卡</button></div>
+    </div>
+  </div>
+
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script src="js/vendor/three.min.js"></script>
@@ -209,6 +247,7 @@
   <script src="js/extras.js"></script>
   <script src="js/world.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/ui.js"></script>
 </body>
 </html>

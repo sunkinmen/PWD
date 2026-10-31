@@ -17,7 +17,7 @@
   /* ---------- 啟動 ---------- */
   function boot() {
     applyTextSize(safeGet('pwd3d-size') || '1');
-    L.apply(); fillStatic();
+    L.apply(); fillStatic(); if (window.ICONS) ICONS.apply();
     $('#loader-emblem').innerHTML = EM.hub; $('#brand-emblem').innerHTML = EM.hub;
     $('#title-emblems').innerHTML = ZONES.map((z, i) => `<span style="animation-delay:${.1 + i * .07}s" title="${ZN(z)}">${EM[z.id]}</span>`).join('');
     $('#menu-official').href = SITE.officialUrl;
@@ -34,6 +34,9 @@
       if (safeGet('pwd3d-voice') === 'off') Sound.setVoice(false);
       const rm = safeGet('pwd3d-motion') || (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'on' : 'off'); setMotion(rm);
       World.setViewShift(.16);
+      World.setTime(safeGet('pwd3d-time') || 'auto');
+      World.setAvatar(safeGet('pwd3d-avatar') || 'm'); World.setView(safeGet('pwd3d-view') || 'first');
+      updateStampCount();
       buildTiles(); buildLabels(); bindKeys(); bindJoystick(); clock(); showFestival();
       World.on('zoneClick', id => { if (!started) return; World.mode === 'explore' ? openSheet(id) : select(id); });
       World.on('proximity', onProximity); World.on('frame', onFrame); World.on('modeChange', onMode); World.on('npc', onNPC);
@@ -56,7 +59,7 @@
     if (started) return; started = true; blip(660);
     $('#title').classList.add('leaving'); setTimeout(() => $('#title').remove(), 700);
     $('#hud').hidden = false;
-    try { Sound.start(); $('#btn-sound').textContent = '🔊'; } catch (e) { }
+    try { Sound.start(); setSoundIco(true); } catch (e) { }
     track('start', { mode });
     if (mode === 'explore') { World.setMode('explore'); if (!safeGet('pwd3d-toured')) setTimeout(() => startTour(), 900); else toast(t('welcome')); }
     else { select(current); onMode('overview'); }
@@ -69,8 +72,8 @@
   }
   function select(id, quiet) {
     const z = zone(id); if (!z) return;
-    if (World.mode === 'explore') { World.flyTo(id); toast(t('goto', ZN(z))); return; }
-    current = id; if (!quiet) blip(520);
+    if (World.mode === 'explore') { wipe(id, () => World.flyTo(id, true)); return; }
+    current = id; if (!quiet) { blip(520); if (window.Sound && Sound.stinger) Sound.stinger(id); }
     if (location.hash !== '#' + id) history.replaceState(null, '', '#' + id);
     document.documentElement.style.setProperty('--accent', z.color);
     document.documentElement.style.setProperty('--accent-soft', z.soft);
@@ -85,8 +88,9 @@
     $('#hero-link').href = z.officialUrl;
     $('#hero-visited').hidden = !visited.has(id);
     const ml = L.Z(z, 'metrics');
-    $('#hero-cards').innerHTML = z.metrics.map((m, i) => `<div class="card"><small>${Array.isArray(ml) && typeof ml[i] === 'string' ? ml[i] : m.label}</small><b>${m.value}</b><i>${m.unit}</i></div>`).join('')
-      + z.news.slice(0, 2).map(n => `<button class="card news" onclick="UI.openSheet()"><small>${n.date}・${n.tag}</small><span>${n.title}</span></button>`).join('');
+    $('#hero-cards').innerHTML = z.metrics.map((m, i) => `<div class="card">${ICONS.svg(m.ico || 'chart')}${m.trend ? `<em class="trend ${m.trend}" title="${t(m.trend === 'up' ? 'trendUp' : 'trendFlat')}">${m.trend === 'up' ? ICONS.svg('up') : '—'}</em>` : ''}<small>${Array.isArray(ml) && typeof ml[i] === 'string' ? ml[i] : m.label}</small><b>${m.value}</b><i>${m.unit}</i></div>`).join('')
+      + z.news.slice(0, 2).map(n => `<button class="card news" style="--tagc:${tagColor(n.tag, z)}" onclick="UI.openSheet()"><span class="thumb">${EM[id]}</span><small>${n.date}<em>${n.tag}</em></small><span>${n.title}</span></button>`).join('');
+    $('#hero').classList.remove('open');
     const h = $('#hero'); h.classList.remove('swap'); void h.offsetWidth; h.classList.add('swap');
     World.flyTo(id);
     if (!$('#sheet').hidden) fillSheet(id);
@@ -96,8 +100,11 @@
 
   function markVisited(id) {
     if (visited.has(id)) return; visited.add(id); safeSet('pwd3d-visited', JSON.stringify([...visited]));
+    stampDates[id] = stampDates[id] || new Date().toISOString().slice(0, 10); safeSet('pwd3d-stamps', JSON.stringify(stampDates));
     const d = document.querySelector(`.tile[data-id="${id}"] .dot`); if (d) d.hidden = false;
     const n = visited.size; toast(n === ZONES.length ? t('allVisited') : t('visitedN', ZN(zone(id)), n, ZONES.length));
+    stampPop(id); updateStampCount();
+    if (n === ZONES.length) setTimeout(celebrate, 1600);
     track('zone_visit', { zone: id });
   }
 
@@ -107,10 +114,10 @@
     const ex = m === 'explore';
     World.setViewShift(ex ? 0 : .17);
     $('#explore-hud').hidden = !ex; $('#hero').hidden = ex; $('#tiles').style.display = ex ? 'none' : '';
-    $('#mode-ico').textContent = ex ? '🗺️' : '🚶'; const mt = $('#mode-txt'); mt.dataset.i18n = ex ? 'overviewShort' : 'explore'; mt.textContent = t(mt.dataset.i18n);
+    $('#mode-ico').innerHTML = ICONS.svg(ex ? 'map' : 'walk'); const mt = $('#mode-txt'); mt.dataset.i18n = ex ? 'overviewShort' : 'explore'; mt.textContent = t(mt.dataset.i18n);
     if (!ex) { select(current, true); $('#prompt').hidden = true; }
   }
-  function enterZone() { const id = current; World.setMode('explore'); setTimeout(() => World.flyTo(id), 50); }
+  function enterZone() { const id = current; wipe(id, () => { World.setMode('explore'); World.flyTo(id, true); }); }
 
   function onProximity(id) {
     near = id; const p = $('#prompt');
@@ -130,7 +137,7 @@
     $('#sheet-badge').textContent = L.Z(z, 'badge') + '・' + L.Z(z, 'tagline');
     $('#sheet-title').textContent = L.Z(z, 'title');
     $('#sheet-services').innerHTML = z.services.map((s, i) => `<a href="${s.url}" target="_blank" rel="noopener" onclick="Extras.track('service_click',{zone:'${id}',service:'${s.name}'})"><span aria-hidden="true">${s.icon}</span>${Array.isArray(sn) && typeof sn[i] === 'string' ? sn[i] : s.name}</a>`).join('');
-    $('#sheet-news').innerHTML = z.news.map(n => `<li><time>${n.date}<em>${n.tag}</em></time>${n.url ? `<a href="${n.url}" target="_blank" rel="noopener">${n.title}</a>` : n.title}</li>`).join('');
+    $('#sheet-news').innerHTML = z.news.map(n => `<li style="--tagc:${tagColor(n.tag, z)}"><time>${n.date}<em>${n.tag}</em></time>${n.url ? `<a href="${n.url}" target="_blank" rel="noopener">${n.title}</a>` : n.title}</li>`).join('');
     $('#sheet-link').href = z.officialUrl;
   }
   function openSheet(id) { id = id || current; fillSheet(id); lastFocus = document.activeElement; $('#sheet').hidden = false; blip(600); if (World.mode === 'explore') markVisited(id); setTimeout(() => $('#sheet .icon-btn').focus(), 30); track('sheet_open', { zone: id }); }
@@ -150,7 +157,7 @@
   function close(id) { const m = $('#' + id); if (!m || m.hidden) return; m.hidden = true; if (lastFocus && document.contains(lastFocus)) lastFocus.focus(); }
   document.addEventListener('keydown', e => {
     if (e.key !== 'Tab') return;
-    const m = [...document.querySelectorAll('.modal,#sheet,#tour')].find(x => !x.hidden); if (!m) return;
+    const m = [...document.querySelectorAll('.modal,#sheet,#tour,#celebrate')].find(x => !x.hidden); if (!m) return;
     const f = [...m.querySelectorAll('button,a[href],input,[tabindex="0"]')].filter(x => x.offsetParent !== null); if (!f.length) return;
     if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
     else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
@@ -164,6 +171,9 @@
     seg('#seg-size', safeGet('pwd3d-size') || '1', v => { applyTextSize(v); safeSet('pwd3d-size', v); });
     seg('#seg-motion', safeGet('pwd3d-motion') || 'off', v => { setMotion(v); safeSet('pwd3d-motion', v); });
     seg('#seg-quality', safeGet('pwd3d-quality') || 'auto', v => { World.setQuality(v); safeSet('pwd3d-quality', v); toast(t('qualityChanged')); });
+    seg('#seg-time', World.timeMode || 'auto', v => { World.setTime(v); safeSet('pwd3d-time', v); });
+    seg('#seg-view', World.view, v => { World.setView(v); safeSet('pwd3d-view', v); if (v === 'third' && World.mode !== 'explore') { close('menu'); World.setMode('explore'); } });
+    seg('#seg-avatar', safeGet('pwd3d-avatar') || 'm', v => { World.setAvatar(v); safeSet('pwd3d-avatar', v); if (World.view !== 'third') { World.setView('third'); safeSet('pwd3d-view', 'third'); seg('#seg-view', 'third', () => { }); openMenu(); } });
   }
   function seg(sel, val, fn) {
     document.querySelectorAll(sel + ' button').forEach(b => { const on = b.dataset.v === val; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
@@ -187,7 +197,7 @@
     $('#search-results').innerHTML = (list.length ? list : window.SEARCH_INDEX).map(s => `<button onclick="UI.close('search');UI.goSearch('${s.zone}')">${EM[s.zone]}<span>${s.title}<small>${ZN(zone(s.zone))}</small></span></button>`).join('');
     if (q) track('search', { q });
   }
-  function goSearch(id) { if (World.mode === 'explore') { World.flyTo(id); setTimeout(() => openSheet(id), 1300); } else { select(id); setTimeout(() => openSheet(id), 900); } }
+  function goSearch(id) { if (World.mode === 'explore') { select(id); setTimeout(() => openSheet(id), 1400); } else { select(id); setTimeout(() => openSheet(id), 900); } }
 
   /* ---------- 我要辦 ---------- */
   function openTasks() {
@@ -235,8 +245,8 @@
     addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') close('search'); return; }
       if (!started) { if (e.key === 'Enter' && e.target === document.body) start('explore'); return; }
-      if (e.key === 'Escape') { if (!$('#tour').hidden) return endTour(); ['menu', 'search', 'tasks', 'a11y'].forEach(close); closeSheet(); return; }
-      if ([...document.querySelectorAll('.modal,#tour')].some(m => !m.hidden)) return;
+      if (e.key === 'Escape') { if (!$('#tour').hidden) return endTour(); if (!$('#celebrate').hidden) return closeCelebrate(); ['menu', 'search', 'tasks', 'a11y', 'stamps'].forEach(close); closeSheet(); return; }
+      if ([...document.querySelectorAll('.modal,#tour,#celebrate')].some(m => !m.hidden)) return;
       const onUI = e.target !== document.body && e.target.tagName !== 'CANVAS';
       if (World.mode === 'overview') {
         if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1);
@@ -276,9 +286,7 @@
       el.classList.toggle('on', !ex && p.id === current);
     });
     if (ex) drawMinimap();
-    if (npcId) { const q = World.projectNPC(npcId), b = $('#npc-bubble');
-      if (q && q.visible) { const w = innerWidth, hw = Math.min(180, w * .42), x = Math.max(hw, Math.min(w - hw, q.x)), y = Math.max(140, q.y); b.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`; b.style.opacity = 1; }
-      else b.style.opacity = 0; }
+
   }
   const mm = { ctx: null };
   function drawMinimap() {
@@ -303,17 +311,18 @@
   function clock() { const f = () => { $('#clock').textContent = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }); }; f(); setInterval(f, 15000); }
   let tt; function toast(msg, ms = 2600) { const el = $('#toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), ms); }
   const blip = f => window.Sound && Sound.blip(f);
-  function toggleSound() { if (Sound.on) { Sound.stop(); $('#btn-sound').textContent = '🔈'; } else { Sound.start(); $('#btn-sound').textContent = '🔊'; } }
+  function toggleSound() { if (Sound.on) { Sound.stop(); setSoundIco(false); } else { Sound.start(); setSoundIco(true); } }
+  function setSoundIco(on) { $('#btn-sound').innerHTML = ICONS.svg(on ? 'soundOn' : 'soundOff'); }
 
   /* ---------- NPC 對話 ---------- */
   let npcId = null, npcIdx = {}, typing = null;
   const npcData = id => (window.NPCS || []).find(n => n.id === id);
   function onNPC(id) {
     npcId = id; const bub = $('#npc-bubble');
-    if (!id) { bub.hidden = true; Sound.stopVoice(); if (near) onProximity(near); else $('#prompt').hidden = true; return; }
+    if (!id) { bub.hidden = true; lastMood = ''; Sound.stopVoice(); if (near) onProximity(near); else $('#prompt').hidden = true; return; }
     const n = npcData(id);
     $('#npc-name').textContent = L.N(n, 'name'); $('#npc-role').textContent = L.N(n, 'role');
-    const av = $('#npc-avatar'); av.hidden = false; av.alt = L.N(n, 'name'); av.src = `assets/npc/${n.id}.jpg`;
+    const av = $('#npc-avatar'); av.hidden = false; av.alt = L.N(n, 'name'); setMood(n, 'happy');
     bub.style.setProperty('--c', (zone(n.zone) || {}).color || '#4a7fd4');
     bub.hidden = false;
     const greet = L.N(n, 'greet'), gi = Math.random() * greet.length | 0; talk(greet[gi], n, L.lang === 'zh' ? `${n.id}-g${gi + 1}` : null);
@@ -327,13 +336,125 @@
   }
   function talk(line, n, key) {
     const text = typeof line === 'string' ? line : line.text, el = $('#npc-text');
+    setMood(n, moodOf(text)); World.npcTalk && World.npcTalk(n.id, Math.min(8, .9 + text.length * .11));
     clearInterval(typing); let k = 0; el.textContent = '';
     if (document.body.classList.contains('reduce-motion')) el.textContent = text;
     else typing = setInterval(() => { el.textContent = text.slice(0, ++k); if (k >= text.length) clearInterval(typing); }, 38);
     Sound.say(line, Object.assign({ key, lang: L.lang }, n.voice));
   }
 
-  window.UI = { nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
+  /* ---------- 表情：依台詞關鍵字切換「開心／擔心／一般」立繪 ---------- */
+  const WORRY = /颱風|豪雨|暴雨|危險|小心|千萬|請勿|坍|崩塌|落石|警戒|別靠近|不要靠近|遠離|careful|danger|never|stay away|typhoon/i;
+  const HAPPY = /歡迎|哈囉|嗨|哈哈|呵呵|開心|恭喜|好玩|喜歡|漂亮|謝謝|讚|太好|舒服|welcome|hello|hi |great|enjoy|fun|thanks|love/i;
+  const moodOf = text => WORRY.test(text) ? 'worried' : HAPPY.test(text) ? 'happy' : 'normal';
+  let lastMood = '';
+  function setMood(n, mood) {
+    const av = $('#npc-avatar'), b = $('#npc-bubble'), key = n.id + mood; if (key === lastMood) return; lastMood = key;
+    av.src = `assets/npc/${n.id}${mood === 'normal' ? '' : '-' + mood}.jpg`;
+    av.onerror = () => { av.onerror = () => { av.hidden = true; }; av.src = `assets/npc/${n.id}.jpg`; };
+    b.classList.remove('mood-happy', 'mood-worried'); if (mood !== 'normal') b.classList.add('mood-' + mood);
+    av.classList.remove('pop'); void av.offsetWidth; av.classList.add('pop');
+  }
+
+  /* ---------- 公告標籤顏色 ---------- */
+  const TAGC = [[/防汛|防災|安全|颱風|坡地|警/, '#e8833a'], [/花|公園|共融|綠/, '#3fae6a'], [/水|河|污水|下水道/, '#2f8fd8'], [/智慧|科技|3D|感測/, '#7a5cd6'], [/淨零|永續|低碳/, '#1f9b8f'], [/路|橋|工程/, '#d6a12a']];
+  function tagColor(tag, z) { const f = TAGC.find(([re]) => re.test(tag)); return f ? f[1] : z.color; }
+
+  /* ---------- 手機資訊面板上拉 ---------- */
+  function toggleHero() { $('#hero').classList.toggle('open'); blip(640); }
+  (function swipeHero() {
+    let y0 = null; const h = () => $('#hero');
+    addEventListener('touchstart', e => { if (h() && h().contains(e.target)) y0 = e.touches[0].clientY; }, { passive: true });
+    addEventListener('touchend', e => { if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null;
+      if (dy < -40) h().classList.add('open'); else if (dy > 40) h().classList.remove('open'); }, { passive: true });
+  })();
+
+  /* ---------- 世界轉場（雲朵擦拭＋專屬音效）---------- */
+  let wiping = false;
+  function wipe(id, mid) {
+    const z = zone(id), w = $('#wipe');
+    if (document.body.classList.contains('reduce-motion') || wiping) { mid(); if (World.mode === 'explore') toast(t('goto', ZN(z))); return; }
+    wiping = true; w.style.setProperty('--wc', z.soft); $('#wipe-emblem').innerHTML = EM[id]; $('#wipe-name').textContent = L.Z(z, 'title');
+    w.classList.remove('run'); void w.offsetWidth; w.classList.add('run');
+    if (window.Sound && Sound.stinger) Sound.stinger(id);
+    setTimeout(mid, 520); setTimeout(() => { w.classList.remove('run'); wiping = false; }, 1300);
+    track('teleport', { zone: id });
+  }
+
+  /* ---------- 工務護照（集章）＋集滿慶祝＋紀念卡 ---------- */
+  const stampDates = JSON.parse(safeGet('pwd3d-stamps') || '{}');
+  visited.forEach(id => { if (!stampDates[id]) stampDates[id] = ''; });
+  const ROT = [-8, 6, -4, 9, -11, 4];
+  function stampHTML(z, i, got, cls = '') {
+    return `<div class="stamp ${got ? 'got' : ''} ${cls}" style="--c:${z.color};--r:${ROT[i % 6]}deg" title="${L.Z(z, 'title')}">${EM[z.id]}<span>${ZN(z)}</span>${got && stampDates[z.id] ? `<time>${stampDates[z.id]}</time>` : ''}</div>`;
+  }
+  function updateStampCount() { const n = visited.size, el = $('#stamp-count'); if (!el) return; el.textContent = `${n}/${ZONES.length}`; el.closest('button').classList.toggle('full', n === ZONES.length); }
+  function openStamps(justId) {
+    $('#stamp-grid').innerHTML = ZONES.map((z, i) => stampHTML(z, i, visited.has(z.id), z.id === justId ? 'just' : '')).join('');
+    $('#stamp-grid').querySelectorAll('.stamp').forEach((el, i) => el.onclick = () => { close('stamps'); goSearch(ZONES[i].id); });
+    $('#cert-row').hidden = visited.size < ZONES.length;
+    const nm = $('#cert-name'); nm.value = safeGet('pwd3d-name') || '';
+    openModal('stamps'); track('stamps_open', { n: visited.size });
+  }
+  function stampPop(id) {
+    const z = zone(id), i = ZONES.indexOf(z); let box = $('#stamp-toast'); if (box) box.remove();
+    box = document.createElement('div'); box.id = 'stamp-toast'; box.innerHTML = stampHTML(z, i, true, 'just'); document.body.appendChild(box);
+    if (window.Sound && Sound.stamp) setTimeout(Sound.stamp, 200);
+    setTimeout(() => { box.style.transition = '.4s'; box.style.opacity = 0; }, 1300); setTimeout(() => box.remove(), 1800);
+  }
+  function celebrate() {
+    $('#celebrate').hidden = false; lastFocus = document.activeElement; setTimeout(() => $('#celebrate .btn-primary').focus(), 50);
+    if (window.Sound && Sound.fanfare) Sound.fanfare();
+    if (World.npcWave) World.npcWave('god');
+    if (Sound.say) { const n = npcData('god'); Sound.say(t('celeText').replace(/^.*?[「“]|[」”]$/g, ''), Object.assign({ lang: L.lang }, n && n.voice)); }
+    confetti(); track('all_stamps');
+  }
+  function closeCelebrate() { $('#celebrate').hidden = true; Sound.stopVoice && Sound.stopVoice(); if (lastFocus) lastFocus.focus(); }
+  function confetti() {
+    const c = $('#confetti'), x = c.getContext('2d'); c.width = innerWidth; c.height = innerHeight;
+    if (document.body.classList.contains('reduce-motion')) return;
+    const cols = ZONES.map(z => z.color).concat(['#ffd166', '#ff9ec7']);
+    const P = Array.from({ length: 140 }, () => ({ x: Math.random() * c.width, y: -20 - Math.random() * c.height * .6, vx: (Math.random() - .5) * 2, vy: 2 + Math.random() * 3, r: Math.random() * 6.3, s: 6 + Math.random() * 7, c: cols[Math.random() * cols.length | 0] }));
+    const t0 = performance.now();
+    (function f(now) { x.clearRect(0, 0, c.width, c.height); P.forEach(p => { p.x += p.vx; p.y += p.vy; p.r += .08; x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.fillStyle = p.c; x.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); x.restore(); });
+      if (now - t0 < 5000 && !$('#celebrate').hidden) requestAnimationFrame(f); else x.clearRect(0, 0, c.width, c.height); })(t0);
+  }
+  /* 紀念卡：Canvas 繪製 1200×800 PNG，印上姓名、六枚章、山神祝福 */
+  async function downloadCert() {
+    const name = ($('#cert-name').value || t('explorer')).trim().slice(0, 16); safeSet('pwd3d-name', name);
+    const W = 1200, H = 800, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+    const img = src => new Promise(r => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = src; });
+    const svgImg = (svg, col) => img('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg', `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" color="${col}"`)));
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#dff0ff'); g.addColorStop(1, '#fff6e8'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const sky = await img(SITE.skyImage); if (sky) { x.globalAlpha = .35; x.drawImage(sky, 0, 0, W, H * .55); x.globalAlpha = 1; }
+    x.fillStyle = 'rgba(255,255,255,.88)'; roundRect(x, 40, 40, W - 80, H - 80, 36); x.fill();
+    x.strokeStyle = '#ffd166'; x.lineWidth = 6; roundRect(x, 52, 52, W - 104, H - 104, 30); x.stroke();
+    const god = await img('assets/npc/god-happy.jpg'); if (god) { x.save(); x.beginPath(); x.arc(W - 190, 190, 100, 0, 7); x.clip(); x.drawImage(god, W - 290, 90, 200, 200); x.restore();
+      x.strokeStyle = '#ffd166'; x.lineWidth = 8; x.beginPath(); x.arc(W - 190, 190, 104, 0, 7); x.stroke(); }
+    const hub = await svgImg(EM.hub, '#4a7fd4'); if (hub) x.drawImage(hub, 96, 92, 84, 84);
+    x.fillStyle = '#24304f'; x.font = '900 52px "Noto Sans TC", sans-serif'; x.fillText(t('certTitle'), 196, 150);
+    x.font = '700 24px "Noto Sans TC", sans-serif'; x.fillStyle = '#56607e'; x.fillText(L.S('orgName') + '｜Taipei Public Works', 198, 190);
+    x.font = '900 72px "Noto Sans TC", sans-serif'; x.fillStyle = '#24304f'; x.fillText(name, 100, 300);
+    x.font = '700 28px "Noto Sans TC", sans-serif'; x.fillStyle = '#56607e'; x.fillText(t('certLine'), 100, 350);
+    for (let i = 0; i < ZONES.length; i++) {
+      const z = ZONES[i], cx = 188 + i * 165, cy = 520, e = await svgImg(EM[z.id], z.color);
+      x.save(); x.translate(cx, cy); x.rotate(ROT[i] * Math.PI / 180);
+      x.fillStyle = '#fff'; x.beginPath(); x.arc(0, 0, 76, 0, 7); x.fill();
+      x.strokeStyle = z.color; x.lineWidth = 5; x.beginPath(); x.arc(0, 0, 76, 0, 7); x.stroke(); x.lineWidth = 2; x.beginPath(); x.arc(0, 0, 67, 0, 7); x.stroke();
+      if (e) x.drawImage(e, -34, -50, 68, 68);
+      x.fillStyle = z.color; x.font = '900 18px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.fillText(ZN(z), 0, 42, 118);
+      x.font = '600 13px Outfit, sans-serif'; x.fillText(stampDates[z.id] || '', 0, 60); x.restore(); x.textAlign = 'left';
+    }
+    x.font = 'italic 700 24px "Noto Sans TC", sans-serif'; x.fillStyle = '#8a6a1f';
+    const bless = t('celeText'); let line = '', ly = 660;
+    for (const ch of bless) { if (x.measureText(line + ch).width > 1000) { x.fillText(line, 100, ly); line = ''; ly += 34; } line += ch; } x.fillText(line, 100, ly);
+    x.font = '600 20px Outfit, sans-serif'; x.fillStyle = '#56607e'; x.fillText(new Date().toISOString().slice(0, 10) + '  ·  sunkinmen.github.io/PWD', 100, 736);
+    c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `taipei-pwd-explorer-${name}.png`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }, 'image/png');
+    toast('🎉 ' + t('certDl')); track('cert_download');
+  }
+  function roundRect(x, a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
+
+  window.UI = { talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
     share, openTasks, startTour, tourNext, endTour, toggleLang };
   boot();
 })();

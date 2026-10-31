@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#dfeefc">
+  <title>臺北市政府工務局｜臺北工務 探索世界</title>
+  <meta name="description" content="以 3D 探索臺北市政府工務局與新建、水利、公園路燈、衛生下水道、大地五大工程處，和工作人員聊天認識市政工程。">
+  <link rel="canonical" href="https://sunkinmen.github.io/PWD/">
+  <!-- 分享預覽（Facebook / LINE / X） -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="臺北工務 探索世界｜臺北市政府工務局">
+  <meta property="og:description" content="走進道路、水利、公園、下水道與山坡地的五大工程世界">
+  <meta property="og:image" content="https://sunkinmen.github.io/PWD/assets/sky-taipei-title.jpg">
+  <meta property="og:url" content="https://sunkinmen.github.io/PWD/">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <script type="application/ld+json">
+  { "@context": "https://schema.org", "@type": "GovernmentOrganization", "name": "臺北市政府工務局", "alternateName": "Public Works Department, Taipei City Government",
+    "url": "https://pwd.gov.taipei/", "telephone": "+886-2-27208889",
+    "address": { "@type": "PostalAddress", "streetAddress": "市府路1號4樓", "addressLocality": "臺北市信義區", "postalCode": "110204", "addressCountry": "TW" },
+    "subOrganization": [ { "@type": "GovernmentOrganization", "name": "新建工程處", "url": "https://nco.gov.taipei/" }, { "@type": "GovernmentOrganization", "name": "水利工程處", "url": "https://heo.gov.taipei/" },
+      { "@type": "GovernmentOrganization", "name": "公園路燈工程管理處", "url": "https://pkl.gov.taipei/" }, { "@type": "GovernmentOrganization", "name": "衛生下水道工程處", "url": "https://sso.gov.taipei/" },
+      { "@type": "GovernmentOrganization", "name": "大地工程處", "url": "https://geo.gov.taipei/" } ] }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@900&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip" href="#a11y" onclick="UI.openA11y();return false;" data-i18n="skip">跳到純文字版（無障礙）</a>
+
+  <!-- 3D 世界 -->
+  <div id="world" aria-hidden="true"></div>
+  <div id="labels" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <!-- 載入畫面 -->
+  <div id="loader" role="progressbar" aria-label="載入中">
+    <div class="loader-emblem" id="loader-emblem"></div>
+    <div class="loader-bar"><i id="loader-fill"></i></div>
+    <p id="loader-text" data-i18n="loading">正在搭建臺北工務世界…</p>
+  </div>
+
+  <!-- 標題畫面 -->
+  <main id="title" class="screen" aria-labelledby="title-h1">
+    <div class="title-inner">
+      <div class="title-emblems" id="title-emblems" aria-hidden="true"></div>
+      <p class="eyebrow" data-i18n="eyebrow">TAIPEI PUBLIC WORKS · EXPLORE</p>
+      <h1 id="title-h1">臺北工務 探索世界</h1>
+      <p class="title-sub" id="title-sub"></p>
+      <div class="title-actions">
+        <button class="btn btn-primary btn-lg" onclick="UI.start('explore')"><span class="kbd">Enter</span><span data-i18n="start">開始探索</span></button>
+        <button class="btn btn-glass btn-lg" onclick="UI.start('overview')" data-i18n="overview">城市總覽</button>
+      </div>
+      <p class="title-foot"><span data-i18n="titleFoot">第一人稱漫遊・支援電腦與手機</span>　|　<a href="#a11y" onclick="UI.openA11y();return false;" data-i18n="textOnly">純文字版</a>　|
+        <button class="lang-btn" onclick="UI.toggleLang()">中文 / EN</button></p>
+    </div>
+  </main>
+
+  <!-- 節慶／防汛提示 -->
+  <div id="festival" role="note" hidden><span id="festival-text"></span><button onclick="this.parentNode.hidden=true" data-i18n-aria="close">✕</button></div>
+
+  <!-- HUD -->
+  <div id="hud" hidden>
+    <header class="topbar">
+      <button class="brand" onclick="UI.select('hub')" aria-label="工務局">
+        <span class="brand-emblem" id="brand-emblem" aria-hidden="true"></span>
+        <span class="brand-text"><b data-i18n="org">臺北市政府工務局</b><small>Public Works Department</small></span>
+      </button>
+      <div class="top-right">
+        <span class="clock" id="clock" aria-hidden="true">--:--</span>
+        <button class="icon-btn btn-tasks" onclick="UI.openTasks()"><span aria-hidden="true">📝</span><em data-i18n="tasks">我要辦</em></button>
+        <button class="icon-btn" onclick="UI.toggleMode()" id="btn-mode"><span id="mode-ico" aria-hidden="true">🚶</span><em id="mode-txt" data-i18n="explore">探索</em></button>
+        <button class="icon-btn" onclick="UI.openSearch()" data-i18n-aria="searchTitle">⌕</button>
+        <button class="icon-btn" onclick="UI.toggleSound()" aria-label="環境音" id="btn-sound">🔈</button>
+        <button class="icon-btn" onclick="UI.openMenu()" data-i18n-aria="settings">☰</button>
+      </div>
+    </header>
+
+    <!-- 世界選擇列（PS5 風格） -->
+    <nav id="tiles" aria-label="選擇工程世界"></nav>
+
+    <!-- 世界資訊（總覽模式） -->
+    <section id="hero" aria-live="polite">
+      <div class="hero-badge"><span id="hero-badge"></span><span id="hero-visited" class="visited" hidden data-i18n="visited">✓ 已造訪</span></div>
+      <h2 id="hero-title"></h2>
+      <p id="hero-tagline" class="tagline"></p>
+      <p id="hero-sub" class="hero-sub"></p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" onclick="UI.enterZone()" data-i18n="enter">▶ 進入世界</button>
+        <button class="btn btn-glass" onclick="UI.openSheet()" data-i18n="servicesNews">服務與公告</button>
+        <button class="btn btn-ghost" onclick="UI.share()"><span aria-hidden="true">🔗</span> <span data-i18n="share">分享</span></button>
+        <a class="btn btn-ghost" id="hero-link" target="_blank" rel="noopener" data-i18n="website">官網 ↗</a>
+      </div>
+      <div class="cards" id="hero-cards"></div>
+    </section>
+
+    <!-- 探索模式 HUD -->
+    <div id="explore-hud" hidden>
+      <canvas id="minimap" width="180" height="180" aria-hidden="true"></canvas>
+      <button id="prompt" hidden><span class="kbd">E</span><span id="prompt-text"></span></button>
+      <div id="npc-bubble" hidden onclick="UI.nextLine()" role="button" tabindex="0">
+        <img id="npc-avatar" alt="" onerror="this.hidden=true">
+        <div class="npc-head"><b id="npc-name"></b><small id="npc-role"></small></div>
+        <p id="npc-text" aria-live="polite"></p>
+        <span class="npc-next" data-i18n="npcNext">點我或按 E 繼續 ▸</span>
+      </div>
+      <p class="hint" id="hint" data-i18n="hint">WASD／方向鍵移動・Shift 奔跑・拖曳轉視角</p>
+      <div id="joystick" aria-hidden="true"><i></i></div>
+    </div>
+  </div>
+
+  <!-- 服務與公告面板 -->
+  <aside id="sheet" role="dialog" aria-labelledby="sheet-title" hidden>
+    <div class="sheet-head">
+      <span class="sheet-emblem" id="sheet-emblem" aria-hidden="true"></span>
+      <div><small id="sheet-badge"></small><h3 id="sheet-title"></h3></div>
+      <button class="icon-btn" onclick="UI.closeSheet()" data-i18n-aria="close">✕</button>
+    </div>
+    <div class="sheet-body">
+      <h4 data-i18n="services">常用服務</h4>
+      <div class="services" id="sheet-services"></div>
+      <h4 data-i18n="news">最新公告</h4>
+      <ul class="news" id="sheet-news"></ul>
+      <a class="btn btn-primary btn-block" id="sheet-link" target="_blank" rel="noopener" data-i18n="officialSite">前往官方網站 ↗</a>
+    </div>
+  </aside>
+
+  <!-- 選單 -->
+  <div class="modal" id="menu" role="dialog" aria-modal="true" aria-labelledby="menu-h" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="menu-h" data-i18n="settings">設定</h3><button class="icon-btn" onclick="UI.close('menu')" data-i18n-aria="close">✕</button></div>
+      <h4 data-i18n="lang">語言 Language</h4>
+      <div class="seg" id="seg-lang"><button data-v="zh">中文</button><button data-v="en">English</button></div>
+      <h4 data-i18n="season">季節</h4>
+      <div class="seg" id="seg-season">
+        <button data-v="spring" data-i18n="spring">🌸 春</button><button data-v="summer" data-i18n="summer">🌻 夏</button><button data-v="autumn" data-i18n="autumn">🍁 秋</button><button data-v="winter" data-i18n="winter">❄️ 冬</button>
+      </div>
+      <h4 data-i18n="voice">角色語音</h4>
+      <div class="seg" id="seg-voice"><button data-v="on" data-i18n="on">開</button><button data-v="off" data-i18n="off">關</button></div>
+      <h4 data-i18n="textSize">文字大小</h4>
+      <div class="seg" id="seg-size"><button data-v="1" data-i18n="sizeN">標準</button><button data-v="1.15" data-i18n="sizeL">大</button><button data-v="1.3" data-i18n="sizeXL">特大</button></div>
+      <h4 data-i18n="motion">減少動態效果</h4>
+      <div class="seg" id="seg-motion"><button data-v="off" data-i18n="off">關</button><button data-v="on" data-i18n="on">開</button></div>
+      <h4 data-i18n="quality">畫質</h4>
+      <div class="seg" id="seg-quality">
+        <button data-v="auto" data-i18n="auto">自動</button><button data-v="high" data-i18n="high">高畫質</button><button data-v="eco" data-i18n="eco">省電</button>
+      </div>
+      <h4 data-i18n="more">其他</h4>
+      <div class="menu-list">
+        <button onclick="UI.close('menu');UI.openA11y()" data-i18n="a11yMode">♿ 純文字無障礙版</button>
+        <button onclick="UI.close('menu');UI.showHelp()" data-i18n="help">🎮 操作說明</button>
+        <button onclick="UI.close('menu');UI.startTour(true)" data-i18n="tour">🧭 重看新手導覽</button>
+        <a href="brand.html" target="_blank" data-i18n="brand">🎨 品牌設計規範</a>
+        <a id="menu-official" target="_blank" rel="noopener" data-i18n="official">🏛️ 工務局官方網站 ↗</a>
+      </div>
+      <p class="fine" id="menu-foot"></p>
+    </div>
+  </div>
+
+  <!-- 我要辦 -->
+  <div class="modal" id="tasks" role="dialog" aria-modal="true" aria-labelledby="tasks-h" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="tasks-h" data-i18n="tasksTitle">我要辦…</h3><button class="icon-btn" onclick="UI.close('tasks')" data-i18n-aria="close">✕</button></div>
+      <div id="tasks-list" class="tasks-list"></div>
+    </div>
+  </div>
+
+  <!-- 搜尋 -->
+  <div class="modal" id="search" role="dialog" aria-modal="true" aria-labelledby="search-h" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="search-h" data-i18n="searchTitle">想找什麼服務？</h3><button class="icon-btn" onclick="UI.close('search')" data-i18n-aria="close">✕</button></div>
+      <input id="search-input" type="search" data-i18n-ph="searchPh" aria-labelledby="search-h" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+  </div>
+
+  <!-- 新手導覽 -->
+  <div id="tour" role="dialog" aria-modal="true" aria-labelledby="tour-h" hidden>
+    <div class="tour-card">
+      <div class="tour-dots" id="tour-dots" aria-hidden="true"></div>
+      <h3 id="tour-h"></h3><p id="tour-p"></p>
+      <div class="tour-actions"><button class="btn btn-ghost" onclick="UI.endTour()" data-i18n="skipTour">略過</button><button class="btn btn-primary" id="tour-next" onclick="UI.tourNext()"></button></div>
+    </div>
+  </div>
+
+  <!-- 純文字無障礙版（無 JavaScript 時也能看到基本資訊） -->
+  <section id="a11y" hidden aria-label="純文字版">
+    <div class="a11y-inner">
+      <button class="btn btn-glass" onclick="UI.close('a11y')" data-i18n="back">← 回到 3D 版</button>
+      <h1 id="a11y-h1"></h1>
+      <div id="a11y-list"></div>
+    </div>
+  </section>
+  <noscript><div class="a11y-inner"><h1>臺北市政府工務局</h1><p>本網站以 3D 呈現工務局與新建工程處、水利工程處、公園路燈工程管理處、衛生下水道工程處、大地工程處。請開啟 JavaScript，或前往 <a href="https://pwd.gov.taipei/">工務局官方網站</a>。</p></div></noscript>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/vendor/three.min.js"></script>
+  <script src="js/content.js"></script>
+  <script src="js/content-en.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/emblems.js"></script>
+  <script src="js/extras.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>

@@ -211,7 +211,7 @@
     W.camera = new T.PerspectiveCamera(isMobile ? 62 : 50, container.clientWidth / container.clientHeight, 0.5, 1600);
 
     // 光：天空半球光＋暖色太陽
-    s.add(new T.HemisphereLight(0xdcecff, 0xf4e6d6, 1.25));
+    s.add(W.hemi = new T.HemisphereLight(0xdcecff, 0xf4e6d6, 1.25));
     const sun = W.sun = new T.DirectionalLight(0xfff0dc, 1.7);
     sun.position.set(70, 120, 60);
     sun.castShadow = true;
@@ -239,6 +239,10 @@
     buildHitboxes();
     setSeason('spring');
     setOutlines(W.outlines);
+    buildNightSky();
+    W.scene.traverse(o => { const m = o.material; if (m && !Array.isArray(m) && m.map && m.map.userData && m.map.userData.night && !m.userData.lit) { m.userData.lit = 1; litMaterial(m, m.map.userData.night, '#ffffff', 1.2); } });
+    setTime('auto'); W.tod.k = 1; W.tod.from = W.tod.to;
+    buildPost(); setPost(W.quality === 'high' || (W.quality === 'auto' && !isMobile));
     bindInput(r.domElement);
     addEventListener('resize', () => resize(container));
     resizeObserver(container);
@@ -252,6 +256,7 @@
     W.renderer.setSize(w, h); W.camera.aspect = w / h;
     W.camera.fov = (w < h) ? 66 : (isMobile ? 58 : 50);
     W.camera.updateProjectionMatrix();
+    if (PP.resize) PP.resize();
   }
 
   /* =====================================================================
@@ -328,18 +333,18 @@
    * 地面
    * ===================================================================== */
   function buildGround() {
-    const far = new T.Mesh(new T.CircleGeometry(372, 64), toon('#dcebd0'));
+    const far = new T.Mesh(new T.CircleGeometry(372, 64), new T.MeshToonMaterial({ color: '#dcebd0', map: grassTex(110), gradientMap: gradMap }));
     far.rotation.x = -Math.PI / 2; far.position.y = -0.05; far.receiveShadow = true; W.scene.add(far);
-    const island = new T.Mesh(new T.CircleGeometry(112, 96), toon('#cfe8b5'));
+    const island = new T.Mesh(new T.CircleGeometry(112, 96), W.groundMat = new T.MeshToonMaterial({ color: '#cfe8b5', map: grassTex(34), gradientMap: gradMap }));
     island.rotation.x = -Math.PI / 2; island.receiveShadow = true; W.scene.add(island);
     // 草地明暗斑塊
     for (let i = 0; i < 26; i++) {
       const r = rnd(30, 105), a = rnd(0, Math.PI * 2);
-      const p = new T.Mesh(new T.CircleGeometry(rnd(6, 14), 20), toon(i % 2 ? '#c4e2a8' : '#d8eec0'));
+      const p = new T.Mesh(new T.CircleGeometry(rnd(6, 14), 20), new T.MeshToonMaterial({ color: i % 2 ? '#c4e2a8' : '#d8eec0', map: W.groundMat.map, gradientMap: gradMap, transparent: true, opacity: .7 }));
       p.rotation.x = -Math.PI / 2; p.position.set(Math.cos(a) * r, 0.02, Math.sin(a) * r); p.receiveShadow = true; W.scene.add(p);
     }
     // 中央廣場
-    const plaza = new T.Mesh(new T.CircleGeometry(15, 64), toon('#f3ece0'));
+    const plaza = new T.Mesh(new T.CircleGeometry(15, 64), new T.MeshToonMaterial({ color: '#ffffff', map: stoneTex(7), gradientMap: gradMap }));
     plaza.rotation.x = -Math.PI / 2; plaza.position.y = 0.06; plaza.receiveShadow = true; W.scene.add(plaza);
     const ring = new T.Mesh(new T.RingGeometry(14.2, 15, 64), toon('#d9c9b0'));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.08; W.scene.add(ring);
@@ -350,7 +355,7 @@
    * ===================================================================== */
   const LOOP_R = 34;
   function buildRoads() {
-    const tex = roadTexture();
+    const tex = asphaltTex();
     const roadMat = new T.MeshToonMaterial({ map: tex, gradientMap: gradMap });
     // 環狀道路
     const pts = []; for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2; pts.push(new V3(Math.sin(a) * LOOP_R, 0, Math.cos(a) * LOOP_R)); }
@@ -362,12 +367,13 @@
     [LOOP_R + 3.9, LOOP_R - 3.9].forEach(rr => { const m = new T.Mesh(new T.TorusGeometry(rr, 0.35, 6, 128), curbMat); m.rotation.x = Math.PI / 2; m.position.y = 0.15; m.receiveShadow = true; W.scene.add(m); });
 
     // 放射步道（工務局 → 各處）＋流動光帶（串連感）
-    const pathMat = toon('#efe3cf');
+    const pathTex = stoneTex(1);
     W.flowMats = [];
     window.ZONES.filter(z => z.id !== 'hub').forEach(z => {
       const [x, zz] = z.pos, len = Math.hypot(x, zz) - 16, ang = Math.atan2(x, zz);
       const g = G(null, 0, 0, 0); g.rotation.y = ang;
-      const p = new T.Mesh(new T.PlaneGeometry(4.2, len), pathMat);
+      const pt = pathTex.clone(); pt.needsUpdate = true; pt.repeat.set(1, len / 4.2);
+      const p = new T.Mesh(new T.PlaneGeometry(4.2, len), new T.MeshToonMaterial({ map: pt, gradientMap: gradMap }));
       p.rotation.x = -Math.PI / 2; p.position.set(0, 0.1, 15 + len / 2 - 2); p.receiveShadow = true; g.add(p);
       const fm = new T.ShaderMaterial({
         transparent: true, depthWrite: false,
@@ -401,8 +407,10 @@
   function streetLight(parent, x, z, h = 4.2) {
     const g = G(parent, x, 0, z);
     M(cyl(0.12, 0.16, h, 8), '#5e6a8a', { y: h / 2, parent: g, ol: 0.05 });
-    const head = M(sph(0.42, 1), '#fff6cf', { y: h + 0.2, parent: g, ol: 0.06, mat: new T.MeshBasicMaterial({ color: '#fff3c4' }) });
+    if (!W.lampMat) { W.lampMat = new T.MeshBasicMaterial({ color: '#fff3c4' }); W.lampMats.push(W.lampMat); }
+    const head = M(sph(0.42, 1), '#fff6cf', { y: h + 0.2, parent: g, ol: 0.06, mat: W.lampMat });
     head.castShadow = false;
+    const gl = glowSprite('#ffd98a', 3.2); gl.position.y = h + .2; g.add(gl);
     return g;
   }
 
@@ -490,7 +498,7 @@
     x.fillStyle = base; x.fillRect(0, 0, 128, 128);
     const cw = 128 / cols, rh = 128 / rows;
     for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { x.fillStyle = win; x.fillRect(i * cw + cw * .2, j * rh + rh * .25, cw * .6, rh * .5); x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(i * cw + cw * .2, j * rh + rh * .25, cw * .18, rh * .5); }
-    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.RepeatWrapping; return t;
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.RepeatWrapping; t.userData.night = nightWindows(cols, rows); return t;
   }
 
   function buildHub() {
@@ -501,7 +509,7 @@
     const bayTex = (base, win) => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; const x = c.getContext('2d');
       x.fillStyle = base; x.fillRect(0, 0, 64, 64); x.fillStyle = 'rgba(0,0,0,.06)'; x.fillRect(0, 60, 64, 4); x.fillRect(0, 0, 3, 64);
       x.fillStyle = win; x.fillRect(16, 20, 32, 28); x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(16, 20, 32, 5);
-      const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; return t; };
+      const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; t.userData.night = nightWindows(1, 1, 1); return t; };
     const beigeTex = bayTex('#ead7c1', '#9d8b86');
     const beigeM = new T.MeshToonMaterial({ map: beigeTex, gradientMap: gradMap });
     const wbox = (w, h, d, uw = 1.6, uh = 1.05) => {
@@ -958,52 +966,109 @@
   /* =====================================================================
    * NPC：依各處業務穿著工程服裝，走近會轉身揮手（對話內容在 content.js）
    * ===================================================================== */
+  /* =====================================================================
+   * NPC：Q 版比例（大頭）比照頭像立繪精修——髮型、大眼、腮紅、制服道具；會眨眼、說話時嘴巴開合、揮手
+   * ===================================================================== */
   W.npcs = [];
+  const SKIN = '#ffe2cc', HAIR = '#4a3428';
   const OUTFIT = {
-    hub:   { shirt: '#eaf2ff', pants: '#4d5b85', vest: '#4a7fd4', hat: null, hair: '#3b2f2f' },
-    road:  { shirt: '#f4f1ea', pants: '#4d5b85', vest: '#ff9e5e', stripe: '#fff3a0', hat: '#ffd166' },
-    water: { shirt: '#6fb6e0', pants: '#3f6ea8', vest: '#8fd0f0', stripe: '#ffffff', hat: '#ffffff', boots: '#ffd166' },
-    park:  { shirt: '#fff6e8', pants: '#6b8f5e', vest: '#7fbf88', straw: true },
-    sewer: { shirt: '#3d4f7a', pants: '#3d4f7a', vest: '#3d4f7a', stripe: '#ffd166', hat: '#ff9e5e', lamp: true },
-    geo:   { shirt: '#d8c49a', pants: '#8a7a5c', vest: '#b7a27a', ranger: true }
+    hub:   { g: 'f', shirt: '#cfe3f7', pants: '#33476e', vest: '#2f4570', hair: '#3a2a22', style: 'pony' },
+    road:  { g: 'm', shirt: '#9aa3b2', pants: '#4d5b85', vest: '#ff8a3d', stripe: '#d8dde6', hat: '#ffcf3f', hair: '#3a2a22' },
+    water: { g: 'f', shirt: '#2f4f86', pants: '#2f4f86', jacket: true, stripe: '#d8dde6', hat: '#f4f6fa', boots: '#ffd166', hair: '#5a3c2c', style: 'pony' },
+    park:  { g: 'f', shirt: '#c9a77c', pants: '#6b8f5e', apron: '#5f9a5c', straw: true, hair: '#7a5236', style: 'bob' },
+    sewer: { g: 'm', shirt: '#2f4570', pants: '#2f4570', jacket: true, hat: '#ff8a3d', lamp: true, hair: '#2f2621' },
+    geo:   { g: 'm', shirt: '#cdb58a', pants: '#8a7a5c', ranger: true, pack: '#6f7d4f', hair: '#3a2a22' },
+    player:  { g: 'm', shirt: '#ffffff', pants: '#4d5b85', vest: '#4a7fd4', stripe: '#d8e8ff', hat: '#ffffff', hair: '#3a2a22' },
+    playerF: { g: 'f', shirt: '#ffffff', pants: '#4d5b85', vest: '#e0707e', stripe: '#ffe0e4', hat: '#ffffff', hair: '#5a3c2c', style: 'pony' }
   };
   function makeNPC(outfit) {
     const o = OUTFIT[outfit] || OUTFIT.hub, p = G(null), v = (x, y, z) => new V3(x, y, z);
-    p.scale.setScalar(1.08);
-    // 腿與鞋
-    const legs = [-1, 1].map(sx => { const leg = G(p, sx * .14, 1.0, 0);
-      M(new T.CapsuleGeometry(.11, .7, 3, 8), o.pants, { y: -.45, parent: leg, ol: .025 });
-      M(box(.22, .16, .36), o.boots || '#3d4258', { y: -.92, z: .06, parent: leg, ol: .02 }); return leg; });
-    // 身體＋背心
-    tube(p, v(0, 1.0, 0), v(0, 1.78, 0), .27, o.shirt, .03);
-    M(sph(.27, 1), o.pants, { y: 1.0, parent: p, ol: 0 });
-    const vest = M(cyl(.3, .3, .62, 14, 1, true), o.vest, { y: 1.45, parent: p, ol: .02 });
-    if (o.stripe) [1.32, 1.56].forEach(y => M(cyl(.305, .305, .06, 14), o.stripe, { y, parent: p, ol: 0 }));
-    if (outfit === 'hub') { M(box(.04, .3, .02), '#4a7fd4', { y: 1.62, z: .3, parent: p, ol: 0 }); M(box(.16, .2, .03), '#ffffff', { y: 1.42, z: .31, parent: p, ol: .01 }); }
-    // 頭
-    const head = G(p, 0, 2.15, 0);
-    M(sph(.3, 2), '#ffe2cc', { parent: head, ol: .03 });
-    [-1, 1].forEach(sx => { M(sph(.045, 0), '#2c3554', { x: sx * .11, y: .02, z: .28, parent: head, ol: 0 }); M(sph(.05, 0), '#ffb3c1', { x: sx * .18, y: -.07, z: .25, parent: head, ol: 0 }); });
-    M(new T.SphereGeometry(.32, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.1), o.hair || '#3b2f2f', { y: .03, z: -.03, parent: head, ol: 0 });
-    if (o.hat) { M(new T.SphereGeometry(.35, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), o.hat, { y: .08, parent: head, ol: .03 });
-      M(cyl(.38, .38, .05, 16), o.hat, { y: .1, z: .06, parent: head, ol: .02 }); }
-    if (o.lamp) M(cyl(.07, .07, .08, 10), '#fff6c9', { y: .26, z: .3, rx: Math.PI / 2, parent: head, ol: 0, mat: new T.MeshBasicMaterial({ color: '#fff6c9' }) });
-    if (o.straw) { M(cyl(.58, .58, .05, 20), '#f2d58e', { y: .14, parent: head, ol: .02 }); M(cyl(.26, .3, .22, 16), '#f2d58e', { y: .25, parent: head, ol: .02 }); M(cyl(.305, .305, .05, 16), '#ff9fb6', { y: .18, parent: head, ol: 0 }); }
-    if (o.ranger) { M(cyl(.52, .52, .05, 20), '#8a7a5c', { y: .14, parent: head, ol: .02 }); M(cyl(.24, .3, .26, 16), '#8a7a5c', { y: .27, parent: head, ol: .02 }); }
-    // 手臂（右手會揮）
-    const armL = G(p, -.36, 1.72, 0); M(new T.CapsuleGeometry(.085, .55, 3, 8), o.shirt, { y: -.32, parent: armL, ol: .02 }); armL.rotation.z = -.12;
-    const armR = G(p, .36, 1.72, 0); M(new T.CapsuleGeometry(.085, .55, 3, 8), o.shirt, { y: -.32, parent: armR, ol: .02 }); armR.rotation.z = .12;
-    // 手持道具
-    const hand = G(armL, 0, -.65, .05);
-    if (outfit === 'road') { M(cyl(.05, .05, .8, 8), '#ff5a4f', { y: .3, rx: .4, parent: hand, ol: 0, mat: new T.MeshBasicMaterial({ color: '#ff6a5c' }) }); }
-    if (outfit === 'water') M(box(.14, .3, .08), '#3d4258', { y: .08, parent: hand, ol: .02 });
-    if (outfit === 'park') { M(box(.05, .45, .05), '#8d93a8', { y: .1, rz: .3, parent: hand, ol: 0 }); M(box(.05, .45, .05), '#8d93a8', { y: .1, rz: -.3, parent: hand, ol: 0 }); }
-    if (outfit === 'sewer') M(box(.2, .26, .1), '#ffd166', { y: .05, parent: hand, ol: .02 });
-    if (outfit === 'geo') { M(cyl(.04, .05, 1.7, 6), '#a8794f', { y: -.1, parent: hand, ol: .02 }); M(box(.5, .6, .26), '#7a9a6a', { y: 1.45 - 1.07, z: -.3, parent: p, ol: .02 }); }
-    if (outfit === 'hub') M(box(.3, .4, .04), '#f3d9a8', { y: .1, rx: -.4, parent: hand, ol: .02 });
-    p.userData = { legs, armR, armL, head };
+    const body = G(p, 0, 0, 0);
+    // 腿（褲＋鞋）
+    const legs = [-1, 1].map(sx => { const leg = G(body, sx * .13, .82, 0);
+      M(new T.CapsuleGeometry(.12, .5, 4, 10), o.pants, { y: -.34, parent: leg, ol: .02 });
+      M(sph(.15, 2), o.boots || '#3d4258', { y: -.7, z: .06, s: [1, .7, 1.4], parent: leg, ol: .02 }); return leg; });
+    // 軀幹
+    M(sph(.36, 3), o.shirt, { y: 1.18, s: [1, 1.15, .82], parent: body, ol: .025 });
+    M(sph(.33, 2), o.pants, { y: .9, s: [1.05, .55, .85], parent: body, ol: 0 });
+    if (o.vest) {
+      const vest = new T.Mesh(new T.CylinderGeometry(.35, .38, .62, 20, 1, true, .55, Math.PI * 2 - 1.1), toon(o.vest, { side: T.DoubleSide }));
+      vest.position.y = 1.16; vest.scale.z = .86; vest.castShadow = true; body.add(vest); outline(vest, .02);
+      if (o.stripe) [1.0, 1.2].forEach(y => { const s = new T.Mesh(new T.CylinderGeometry(.385, .385, .05, 20, 1, true, .55, Math.PI * 2 - 1.1), toon(o.stripe, { side: T.DoubleSide })); s.position.y = y; s.scale.z = .87; body.add(s); });
+    }
+    if (o.jacket && o.stripe) { const s = new T.Mesh(new T.CylinderGeometry(.37, .37, .05, 20, 1, true), toon(o.stripe, { side: T.DoubleSide })); s.position.y = 1.05; s.scale.z = .85; body.add(s); }
+    if (o.jacket) { M(box(.03, .5, .02), '#dfe6ee', { y: 1.18, z: .3, parent: body, ol: 0 }); M(new T.TorusGeometry(.2, .06, 6, 16, Math.PI), o.shirt, { y: 1.45, z: -.05, rx: -Math.PI / 2 + .3, parent: body, ol: .01 }); }
+    if (o.apron) { M(box(.42, .62, .05), o.apron, { y: 1.08, z: .29, parent: body, ol: .015 }); M(box(.18, .12, .055), '#4f8a4c', { y: 1.0, z: .315, parent: body, ol: 0 });
+      [-1, 1].forEach(s => M(box(.05, .32, .04), o.apron, { x: s * .14, y: 1.42, z: .25, rx: -.2, parent: body, ol: 0 })); }
+    if (outfit === 'hub') { tube(body, v(-.12, 1.5, .25), v(0, 1.2, .3), .012, '#3a63b8'); tube(body, v(.12, 1.5, .25), v(0, 1.2, .3), .012, '#3a63b8');
+      M(box(.16, .2, .02), '#ffffff', { y: 1.12, z: .31, parent: body, ol: .01 }); M(box(.06, .07, .022), '#8fb4e8', { x: -.03, y: 1.15, z: .315, parent: body, ol: 0 }); }
+    if (o.pack) { M(box(.5, .55, .26), o.pack, { y: 1.2, z: -.36, parent: body, ol: .025 }); M(box(.42, .18, .1), '#5d6a40', { y: 1.0, z: -.5, parent: body, ol: .01 });
+      [-1, 1].forEach(s => M(box(.05, .5, .04), '#4b5634', { x: s * .2, y: 1.25, z: .2, parent: body, ol: 0 })); }
+    // 頭（大頭 Q 版）
+    const head = G(body, 0, 1.92, 0);
+    M(sph(.42, 4), SKIN, { s: [1, .96, .95], parent: head, ol: .03 });
+    [-1, 1].forEach(sx => M(sph(.09, 2), SKIN, { x: sx * .41, y: -.02, s: [.6, 1, .8], parent: head, ol: .01 }));
+    // 眼睛（白眼、褐色虹膜、瞳孔、兩點高光）＋眼皮（眨眼）
+    const lids = [];
+    [-1, 1].forEach(sx => { const e = G(head, sx * .15, .0, .36);
+      M(sph(.1, 2), '#ffffff', { s: [.9, 1.15, .45], parent: e, ol: 0 });
+      M(sph(.075, 2), '#6b4a32', { z: .03, s: [.9, 1.15, .4], parent: e, ol: 0 });
+      M(sph(.04, 1), '#1b1f2e', { z: .05, s: [1, 1.2, .4], parent: e, ol: 0 });
+      M(sph(.022, 0), '#ffffff', { x: .025, y: .04, z: .07, parent: e, ol: 0 }); M(sph(.012, 0), '#ffffff', { x: -.025, y: -.03, z: .07, parent: e, ol: 0 });
+      const lid = M(new T.SphereGeometry(.105, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), SKIN, { s: [.95, 1.2, .5], parent: e, ol: 0 }); lid.scale.y = .01; lids.push(lid);
+      M(box(.12, .022, .02), o.hair || HAIR, { y: .15, z: .02, rz: sx * -.15, parent: e, ol: 0 });                         // 眉毛
+      M(sph(.06, 1), '#ffb3c1', { x: sx * .07, y: -.12, z: -.02, s: [1, .55, .4], parent: e, ol: 0 }); });                  // 腮紅
+    M(sph(.025, 1), '#f2b9a0', { y: -.08, z: .41, parent: head, ol: 0 });                                                     // 鼻
+    const mouth = G(head, 0, -.18, .39);
+    const smile = new T.Mesh(new T.TorusGeometry(.06, .014, 6, 12, Math.PI), toon('#7a3b33')); smile.rotation.z = Math.PI; mouth.add(smile);
+    const open = M(sph(.05, 2), '#8a3b3b', { s: [1, .2, .4], parent: mouth, ol: 0 }); open.visible = false;
+    // 頭髮
+    const hc = o.hair || HAIR;
+    M(new T.SphereGeometry(.45, 24, 12, 0, Math.PI * 2, 0, Math.PI * .55), hc, { y: .03, z: -.03, rx: -.18, parent: head, ol: .02 });
+    for (let i = -2; i <= 2; i++) M(sph(.11, 1), hc, { x: i * .1, y: .25, z: .3, s: [1, .8, .6], rz: i * .2, parent: head, ol: 0 });     // 瀏海
+    if (o.g === 'f') {
+      [-1, 1].forEach(sx => M(new T.CapsuleGeometry(.07, .3, 3, 8), hc, { x: sx * .38, y: -.15, z: .1, parent: head, ol: .01 }));
+      if (o.style === 'pony') { M(sph(.16, 2), hc, { y: -.12, z: -.42, s: [.9, 1.3, .9], parent: head, ol: .015 }); M(cyl(.06, .06, .06, 10), '#e0707e', { y: .05, z: -.38, rx: .4, parent: head, ol: 0 }); }
+      if (o.style === 'bob') M(sph(.46, 3), hc, { y: -.08, z: -.08, s: [1.02, .75, 1], parent: head, ol: .015 });
+    }
+    // 帽子
+    if (o.hat) { M(new T.SphereGeometry(.47, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), o.hat, { y: .12, parent: head, ol: .03 });
+      M(box(.09, .2, .7), o.hat, { y: .55, s: [1, 1, 1], parent: head, ol: .015 });
+      M(cyl(.52, .53, .05, 28), o.hat, { y: .13, z: .07, s: [1, 1, 1.12], parent: head, ol: .02 });
+      M(box(.82, .04, .04), '#3d4258', { y: .1, z: .0, parent: head, ol: 0 }); }
+    if (o.lamp) { M(cyl(.09, .09, .1, 12), '#3d4258', { y: .3, z: .43, rx: Math.PI / 2 - .2, parent: head, ol: .01 });
+      M(cyl(.065, .065, .02, 12), '#fff6c9', { y: .31, z: .49, rx: Math.PI / 2 - .2, parent: head, ol: 0, mat: new T.MeshBasicMaterial({ color: '#fff6c9' }) }); }
+    if (o.straw) { M(cyl(.66, .66, .04, 28), '#e8c98a', { y: .24, parent: head, ol: .02 }); M(cyl(.3, .36, .28, 20), '#e8c98a', { y: .38, parent: head, ol: .02 });
+      M(cyl(.365, .365, .07, 20), '#5f9a5c', { y: .28, parent: head, ol: 0 }); }
+    if (o.ranger) { M(cyl(.6, .6, .04, 28), '#a8956b', { y: .2, parent: head, ol: .02 }); M(cyl(.3, .36, .3, 20), '#a8956b', { y: .36, parent: head, ol: .02 });
+      M(cyl(.365, .365, .06, 20), '#7a6a4a', { y: .25, parent: head, ol: 0 }); }
+    // 手臂（上臂＋前臂＋手）
+    const arm = (sx) => { const sh = G(body, sx * .38, 1.42, 0), el = G(sh, 0, -.3, 0);
+      M(new T.CapsuleGeometry(.085, .2, 3, 8), o.jacket ? o.shirt : o.shirt, { y: -.15, parent: sh, ol: .015 });
+      M(new T.CapsuleGeometry(.08, .18, 3, 8), o.shirt, { y: -.13, parent: el, ol: .015 });
+      M(sph(.085, 2), SKIN, { y: -.3, parent: el, ol: .012 }); sh.rotation.z = sx * .15; return { sh, el }; };
+    const R = arm(1), Lf = arm(-1);
+    const hand = G(Lf.el, 0, -.32, .04);
+    if (outfit === 'road') { M(cyl(.07, .07, .55, 10), '#f6f2ea', { rz: Math.PI / 2 - .3, parent: hand, ol: .015 }); Lf.sh.rotation.x = -.6; Lf.el.rotation.x = -.9; }
+    if (outfit === 'water') { M(box(.1, .2, .06), '#2c3554', { y: .05, parent: hand, ol: .01 }); M(cyl(.012, .012, .16, 4), '#2c3554', { x: .03, y: .2, parent: hand, ol: 0 }); Lf.el.rotation.x = -1.4; }
+    if (outfit === 'park') { M(box(.03, .22, .03), '#cfd6e2', { y: -.05, rz: .25, parent: hand, ol: 0 }); M(box(.03, .22, .03), '#cfd6e2', { y: -.05, rz: -.25, parent: hand, ol: 0 });
+      M(new T.TorusGeometry(.05, .02, 4, 10), '#e0505e', { y: .07, x: .05, parent: hand, ol: 0 }); M(new T.TorusGeometry(.05, .02, 4, 10), '#e0505e', { y: .07, x: -.05, parent: hand, ol: 0 }); Lf.el.rotation.x = -1.1; }
+    if (outfit === 'sewer') { M(box(.14, .2, .08), '#ffd166', { y: .02, parent: hand, ol: .012 }); M(box(.08, .05, .02), '#7cf0b0', { y: .06, z: .05, parent: hand, ol: 0, mat: new T.MeshBasicMaterial({ color: '#7cf0b0' }) }); Lf.el.rotation.x = -1.2; }
+    if (outfit === 'geo') { M(cyl(.025, .03, 1.3, 6), '#a8794f', { y: -.1, parent: hand, ol: .01 }); }
+    if (outfit === 'hub') { M(box(.24, .3, .03), '#f3d9a8', { y: .02, rx: -.3, parent: hand, ol: .012 }); Lf.el.rotation.x = -1.2; }
+    p.userData = { legs, armR: R.sh, elR: R.el, armL: Lf.sh, head, lids, mouth: { smile, open }, body, blinkT: Math.random() * 3 };
+    p.userData.anim = (t, dt, talking, walking) => {
+      const u = p.userData;
+      u.blinkT -= dt; if (u.blinkT < 0) u.blinkT = 2.5 + Math.random() * 2.5;
+      const b = u.blinkT < .12 ? Math.sin(u.blinkT / .12 * Math.PI) : 0; lids.forEach(l => (l.scale.y = .01 + b * 1.1));
+      const mo = talking && Math.sin(t * 14) > -.2; open.visible = mo; smile.visible = !mo; open.scale.y = .2 + Math.abs(Math.sin(t * 14)) * .8;
+      body.position.y = Math.sin(t * 2.2) * .015;
+      if (walking) { const s = Math.sin(t * 9); legs[0].rotation.x = s * .6; legs[1].rotation.x = -s * .6; u.armL.rotation.x = -s * .5; u.armR.rotation.x = s * .5; body.position.y = Math.abs(Math.cos(t * 9)) * .06; }
+      else legs.forEach(l => (l.rotation.x *= .8));
+    };
     return p;
   }
+
   function buildNPCs() {
     (window.NPCS || []).forEach((n, i) => {
       let pos, obj = null, radius = 6.5;
@@ -1023,13 +1088,15 @@
       W.npcs.push(npc);
       if (obj) W.updaters.push((t, dt) => {
         const u = obj.userData, near = W.mode === 'explore' && W._npc === n.id;
-        obj.position.y = .1 + hill(obj.position.x, obj.position.z) + Math.abs(Math.sin(t * 2 + npc.ph)) * .02;
-        u.head.rotation.y = Math.sin(t * .7 + npc.ph) * .3;
+        obj.position.y = .1 + hill(obj.position.x, obj.position.z);
+        u.head.rotation.y = near ? 0 : Math.sin(t * .7 + npc.ph) * .3;
+        u.head.rotation.x = near ? Math.sin(t * 3) * .05 : 0;
         const goalYaw = near ? Math.atan2(cam.pos.x - obj.position.x, cam.pos.z - obj.position.z) : obj.userData.baseYaw ?? (obj.userData.baseYaw = obj.rotation.y);
         obj.rotation.y += (nearestAngle(obj.rotation.y, goalYaw) - obj.rotation.y) * Math.min(1, dt * 4);
         npc.wave = Math.max(0, npc.wave - dt);
-        u.armR.rotation.z = npc.wave > 0 ? 2.5 + Math.sin(t * 10) * .35 : .12 + Math.sin(t * 1.5 + npc.ph) * .05;
-        if (near) u.head.rotation.y = 0;
+        u.armR.rotation.z = npc.wave > 0 ? 2.6 + Math.sin(t * 10) * .3 : .15 + Math.sin(t * 1.5 + npc.ph) * .05;
+        u.elR.rotation.z = npc.wave > 0 ? .4 : 0;
+        u.anim(t, dt, near && npc.talkUntil > t, false);
       });
     });
   }
@@ -1351,7 +1418,7 @@
       c.copy(c1).lerp(c2, smooth(2, 14, h)).lerp(c3, smooth(22, 34, h)); c.lerp(soil, (1 - smooth(0, 2, h)) * .5);
       c.lerp(rock, smooth(.6, .42, ny) * .7); c.offsetHSL(0, 0, (n - .5) * .05); cols.set([c.r, c.g, c.b], i * 3); }
     geo.setAttribute('color', new T.BufferAttribute(cols, 3));
-    const terrain = new T.Mesh(geo, new T.MeshToonMaterial({ vertexColors: true, gradientMap: gradMap }));
+    const terrain = new T.Mesh(geo, new T.MeshToonMaterial({ vertexColors: true, map: grassTex(14), gradientMap: gradMap }));
     terrain.receiveShadow = true; terrain.castShadow = true; W.scene.add(terrain);
 
     // ── 登山步道（石階＋木扶手）──
@@ -1805,12 +1872,11 @@
   function setSeason(k) {
     const s = SEASONS[k]; if (!s) return; W.season = k;
     W.leafMats.forEach((m, i) => m.color.set(s.leaf[i]));
+    if (W.groundMat) W.groundMat.color.set(s.ground);
+    if (W.leaves) W.leaves.visible = k === 'autumn' || k === 'winter';
     if (W.particleMat) W.particleMat.color.set(s.part);
-    W.scene.fog.color.set(s.fog);
-    waterMats.forEach(m => m.uniforms.uSky && m.uniforms.uSky.value.set(s.sky[1]));
-    const u = W.skyMat.uniforms; u.top.value.set(s.sky[0]); u.mid.value.set(s.sky[1]); u.bot.value.set(s.sky[2]);
-    W.panoMat.uniforms.haze.value.set(s.fog);
-    W.panoMat.uniforms.tint.value.set(k === 'autumn' ? '#fff0e0' : k === 'winter' ? '#eef4ff' : '#ffffff');
+    W.seasonLook = { sky: s.sky, fog: s.fog, tint: k === 'autumn' ? '#fff0e0' : k === 'winter' ? '#eef4ff' : '#ffffff' };
+    setTime(W.todMode || 'auto'); W.tod.k = 1; W.tod.from = W.tod.to; W.tod.applied = false;
   }
 
   function setOutlines(on) { W.outlines = on; outlineList.forEach(o => (o.visible = on)); }
@@ -1818,8 +1884,213 @@
     W.quality = q; const hi = q === 'high' || (q === 'auto' && !isMobile);
     W.renderer.setPixelRatio(Math.min(devicePixelRatio, q === 'eco' ? 1 : hi ? 2 : 1.5));
     W.renderer.shadowMap.enabled = q !== 'eco';
+    if (PP.resize) PP.resize();
     W.scene.traverse(o => { if (o.material && o.material.needsUpdate !== undefined) o.material.needsUpdate = true; });
-    setOutlines(q !== 'eco');
+    setOutlines(q !== 'eco'); setPost(q === 'high' || (q === 'auto' && !isMobile));
+  }
+
+  /* =====================================================================
+   * 後製光影：景深（總覽時呈現微縮模型感）、柔光 Bloom、暖色調調色、暗角、ACES 色調映射
+   * 自製輕量管線（不需額外函式庫）；手機與省電模式自動關閉
+   * ===================================================================== */
+  const PP = { on: false };
+  function buildPost() {
+    const r = W.renderer, q = new T.PlaneGeometry(2, 2), cam2 = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1), sc = new T.Scene(), quad = new T.Mesh(q, null);
+    sc.add(quad);
+    const opt = { type: T.HalfFloatType, depthBuffer: false };
+    PP.main = new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType, samples: isMobile ? 0 : 4 });
+    PP.main.depthTexture = new T.DepthTexture(4, 4); PP.main.depthTexture.type = T.UnsignedIntType;
+    PP.a = new T.WebGLRenderTarget(4, 4, opt); PP.b = new T.WebGLRenderTarget(4, 4, opt);     // 景深模糊
+    PP.c = new T.WebGLRenderTarget(4, 4, opt); PP.d = new T.WebGLRenderTarget(4, 4, opt);     // Bloom
+    const VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`;
+    PP.copy = new T.ShaderMaterial({ uniforms: { t: { value: null }, th: { value: 0 } }, vertexShader: VS,
+      fragmentShader: `uniform sampler2D t; uniform float th; varying vec2 vUv; void main(){ vec3 c = texture2D(t, vUv).rgb; float l = dot(c, vec3(.299,.587,.114)); gl_FragColor = vec4(th > 0. ? c * smoothstep(th, th + .25, l) : c, 1.); }` });
+    PP.blur = new T.ShaderMaterial({ uniforms: { t: { value: null }, dir: { value: new T.Vector2() } }, vertexShader: VS,
+      fragmentShader: `uniform sampler2D t; uniform vec2 dir; varying vec2 vUv;
+        void main(){ vec3 s = texture2D(t, vUv).rgb * .227;
+          s += (texture2D(t, vUv + dir * 1.385).rgb + texture2D(t, vUv - dir * 1.385).rgb) * .316;
+          s += (texture2D(t, vUv + dir * 3.23).rgb + texture2D(t, vUv - dir * 3.23).rgb) * .07; gl_FragColor = vec4(s, 1.); }` });
+    PP.final = new T.ShaderMaterial({
+      uniforms: { tCol: { value: null }, tBlur: { value: null }, tBloom: { value: null }, tDepth: { value: null }, cNear: { value: .5 }, cFar: { value: 1600 },
+        focus: { value: 120 }, dof: { value: .8 }, nearK: { value: 1 }, bloom: { value: .4 }, exposure: { value: 1.06 }, vig: { value: .55 }, warm: { value: 1 } },
+      vertexShader: VS,
+      fragmentShader: `uniform sampler2D tCol, tBlur, tBloom, tDepth; uniform float cNear, cFar, focus, dof, bloom, exposure, vig, warm, nearK; varying vec2 vUv;
+        float lin(float d){ float z = d * 2. - 1.; return 2. * cNear * cFar / (cFar + cNear - z * (cFar - cNear)); }
+        vec3 aces(vec3 x){ return clamp((x * (2.51 * x + .03)) / (x * (2.43 * x + .59) + .14), 0., 1.); }
+        vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1. / 2.4)) - .055, step(.0031308, c)); }
+        void main(){
+          vec3 c = texture2D(tCol, vUv).rgb;
+          float z = lin(texture2D(tDepth, vUv).x);
+          float coc = dof * clamp(max((z - focus * 1.35) / (focus * 1.6), nearK * (focus * .5 - z) / (focus * .5)), 0., 1.) * (1. - smoothstep(280., 360., z) * .8);
+          c = mix(c, texture2D(tBlur, vUv).rgb, coc);
+          c += texture2D(tBloom, vUv).rgb * bloom;
+          c = aces(c * exposure);
+          float l = dot(c, vec3(.299, .587, .114));
+          c = mix(vec3(l), c, 1.1);                                   // 微提飽和
+          c += vec3(.035, .02, .06) * (1. - l) * warm;                // 陰影帶淡紫
+          c *= mix(vec3(1.), vec3(1.03, 1.0, .965), warm);            // 亮部偏暖
+          vec2 p = vUv - .5; c *= 1. - vig * dot(p, p) * 1.2;
+          gl_FragColor = vec4(toSRGB(clamp(c, 0., 1.)), 1.);
+        }` });
+    PP.run = (scene, camera) => {
+      r.setRenderTarget(PP.main); r.render(scene, camera);
+      const pass = (mat, src, dst, set) => { quad.material = mat; set && set(); r.setRenderTarget(dst); r.render(sc, cam2); };
+      pass(PP.copy, null, PP.a, () => { PP.copy.uniforms.t.value = PP.main.texture; PP.copy.uniforms.th.value = 0; });
+      pass(PP.copy, null, PP.c, () => { PP.copy.uniforms.t.value = PP.main.texture; PP.copy.uniforms.th.value = .93; });
+      const bl = (src, dst, x, y) => pass(PP.blur, null, dst, () => { PP.blur.uniforms.t.value = src.texture; PP.blur.uniforms.dir.value.set(x / src.width, y / src.height); });
+      for (let i = 0; i < 2; i++) { bl(PP.a, PP.b, 1.4, 0); bl(PP.b, PP.a, 0, 1.4); bl(PP.c, PP.d, 2, 0); bl(PP.d, PP.c, 0, 2); }
+      const f = PP.final.uniforms; f.tCol.value = PP.main.texture; f.tBlur.value = PP.a.texture; f.tBloom.value = PP.c.texture; f.tDepth.value = PP.main.depthTexture;
+      f.cNear.value = camera.near; f.cFar.value = camera.far;
+      quad.material = PP.final; r.setRenderTarget(null); r.render(sc, cam2);
+    };
+    PP.resize = () => { const s = r.getDrawingBufferSize(new T.Vector2()), w = s.x, h = s.y;
+      PP.main.setSize(w, h); [PP.a, PP.b, PP.c, PP.d].forEach(t => t.setSize(Math.max(1, w >> 2), Math.max(1, h >> 2))); };
+    PP.resize();
+  }
+  function setPost(on) { PP.on = on && !!PP.run; W.renderer.toneMapping = PP.on ? T.NoToneMapping : T.ACESFilmicToneMapping; W.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => (m.needsUpdate = true)); }); }
+
+  /* =====================================================================
+   * 手繪地面貼圖（程式繪製筆觸，可無縫平鋪）＋路邊細節（草叢、小花、落葉、水漬）
+   * ===================================================================== */
+  function paintTex(size, base, draw, rep) {
+    const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d');
+    x.fillStyle = base; x.fillRect(0, 0, size, size);
+    const wrap = fn => { for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) { x.save(); x.translate(dx, dy); fn(); x.restore(); } };
+    draw(x, size, wrap);
+    const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8; t.repeat.set(rep, rep); return t;
+  }
+  const rr = (a, b) => a + Math.random() * (b - a);
+  function grassTex(rep) {
+    return paintTex(512, '#ffffff', (x, S, wrap) => {
+      const cols = ['rgba(150,200,120,.18)', 'rgba(120,180,110,.16)', 'rgba(200,230,170,.22)', 'rgba(100,160,100,.12)', 'rgba(230,245,200,.25)'];
+      for (let i = 0; i < 900; i++) { const px = rr(0, S), py = rr(0, S), a = rr(-.6, .6), l = rr(6, 18), c = cols[i % cols.length], w = rr(1.5, 3.5);
+        wrap(() => { x.strokeStyle = c; x.lineWidth = w; x.lineCap = 'round'; x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.sin(a) * l * .5, py - l * .6, px + Math.sin(a) * l, py - l); x.stroke(); }); }
+      for (let i = 0; i < 60; i++) { const px = rr(0, S), py = rr(0, S), r = rr(14, 40);
+        wrap(() => { const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, i % 2 ? 'rgba(255,255,230,.18)' : 'rgba(90,150,90,.10)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2); }); }
+    }, rep);
+  }
+  function stoneTex(rep) {
+    return paintTex(256, '#efe6d4', (x, S, wrap) => {
+      x.strokeStyle = 'rgba(150,130,100,.35)'; x.lineWidth = 2;
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 4; c++) { const ox = (r % 2) * 32;
+        x.fillStyle = `rgba(${200 + rr(-12, 12) | 0},${185 + rr(-12, 12) | 0},${160 + rr(-12, 12) | 0},.35)`; x.beginPath(); x.roundRect(c * 64 + ox + 3, r * 32 + 3, 58, 26, 6); x.fill(); x.stroke(); }
+      for (let i = 0; i < 300; i++) { x.fillStyle = `rgba(120,100,80,${rr(.03, .1)})`; x.fillRect(rr(0, S), rr(0, S), 2, 2); }
+    }, rep);
+  }
+  function asphaltTex() {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 256; const x = c.getContext('2d');
+    x.fillStyle = '#9599ad'; x.fillRect(0, 0, 128, 256);
+    for (let i = 0; i < 1400; i++) { const l = rr(-30, 30) | 0; x.fillStyle = `rgba(${150 + l},${154 + l},${172 + l},.5)`; x.fillRect(rr(0, 128), rr(0, 256), 2, 2); }
+    for (let i = 0; i < 4; i++) { x.strokeStyle = 'rgba(70,72,90,.25)'; x.lineWidth = 1.2; x.beginPath(); let px = rr(20, 108), py = rr(0, 256); x.moveTo(px, py); for (let k = 0; k < 6; k++) { px += rr(-8, 8); py += rr(4, 12); x.lineTo(px, py); } x.stroke(); }
+    x.fillStyle = 'rgba(80,84,104,.18)'; x.beginPath(); x.roundRect(rr(15, 60), rr(20, 200), 40, 26, 8); x.fill();          // 補丁
+    x.fillStyle = '#f4f1ea'; x.fillRect(6, 0, 5, 256); x.fillRect(117, 0, 5, 256);
+    x.fillStyle = '#ffd98a'; x.fillRect(60, 20, 8, 100); x.fillRect(60, 148, 8, 100);
+    const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8; return t;
+  }
+  // 草叢：5 片細長葉片合成一叢
+  function tuftGeo() {
+    const pos = [], nor = [];
+    for (let k = 0; k < 5; k++) { const c = new T.ConeGeometry(.05, rr(.4, .6), 3).toNonIndexed(); const a = k / 5 * Math.PI * 2, tilt = rr(.2, .45);
+      c.translate(0, .25, 0); c.rotateZ(tilt); c.rotateY(a); c.computeVertexNormals();
+      pos.push(...c.attributes.position.array); nor.push(...c.attributes.normal.array); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); return g;
+  }
+  function buildGroundDetail() {
+    const N = isMobile ? 380 : 900, tuftG = tuftGeo(), flowerG = sph(.11, 0), leafG = new T.PlaneGeometry(.35, .22);
+    const tufts = new T.InstancedMesh(tuftG, toon('#8fc77a'), N), flowers = new T.InstancedMesh(flowerG, toon('#ffffff'), N >> 1), leaves = new T.InstancedMesh(leafG, toon('#ffffff', { side: T.DoubleSide }), N >> 1);
+    const m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), c = new T.Color();
+    const ok = (x, z) => { const r = Math.hypot(x, z); if (r > 108 || r < 16 || Math.abs(r - LOOP_R) < 5.5) return false;
+      if (onSpokes(x, z) || nearRiver(x, z) < RIVER_W / 2 + 4.5) return false;
+      if (window.ZONES.some(({ pos: [zx, zz] }) => Math.hypot(x - zx, z - zz) < 9)) return false;
+      if (nearSpur({ x, z }).d < 5) return false;
+      return !W.colliders.some(k => Math.hypot(x - k.x, z - k.z) < k.r + .5); };
+    const pick = () => { for (let k = 0; k < 40; k++) { const a = rr(0, 6.283), r = Math.sqrt(Math.random()) * 108, x = Math.sin(a) * r, z = Math.cos(a) * r; if (ok(x, z)) return [x, z]; } return null; };
+    let i = 0;
+    for (; i < N; i++) { const p = pick(); if (!p) break; const [x, z] = p, s = rr(.7, 1.4);
+      for (let k = 0; k < 1; k++) { q.setFromEuler(e.set(0, rr(0, 6), 0)); m.compose(new V3(x, hill(x, z), z), q, new V3(s, s, s)); tufts.setMatrixAt(i, m);
+        c.setHSL(.27 + rr(-.03, .03), .45, .55 + rr(-.08, .08)); tufts.setColorAt(i, c); } }
+    tufts.count = i;
+    const fc = ['#ff9fb6', '#ffd166', '#ffffff', '#c6a8ff', '#ffb38a', '#8fd1f0'];
+    for (i = 0; i < flowers.count; i++) { const p = pick(); if (!p) break; const [x, z] = p; m.compose(new V3(x, hill(x, z) + .14, z), q.identity(), new V3(1, .7, 1)); flowers.setMatrixAt(i, m); flowers.setColorAt(i, c.set(fc[i % fc.length])); }
+    for (i = 0; i < leaves.count; i++) { const p = pick(); if (!p) break; const [x, z] = p; q.setFromEuler(e.set(-Math.PI / 2 + rr(-.3, .3), 0, rr(0, 6))); m.compose(new V3(x, hill(x, z) + .08, z), q, new V3(1, 1, 1)); leaves.setMatrixAt(i, m); leaves.setColorAt(i, c.set(['#f2a65a', '#e8c25a', '#d97a4a'][i % 3])); }
+    [tufts, flowers, leaves].forEach(o => { o.receiveShadow = true; o.instanceColor && (o.instanceColor.needsUpdate = true); W.scene.add(o); });
+    W.leaves = leaves; W.flowersInst = flowers;
+    // 水漬（雨後小水窪，反射天空）
+    for (let k = 0; k < 10; k++) { const p = pick(); if (!p) continue; const pd = new T.Mesh(new T.CircleGeometry(rr(.8, 1.6), 20), waterMaterial('#cfe8f5', '#9fcbe8', { radial: true, flow: 0 }));
+      pd.rotation.x = -Math.PI / 2; pd.scale.set(1, rr(.5, .8), 1); pd.position.set(p[0], hill(p[0], p[1]) + .09, p[1]); W.scene.add(pd); }
+  }
+
+  /* =====================================================================
+   * 晨昏日夜：清晨／正午／黃昏／夜晚（預設依現在時間自動），夜間路燈光暈、窗戶亮燈、101 與中正橋點燈、星空月亮
+   * ===================================================================== */
+  const TOD = {
+    dawn:  { w: .65, sky: ['#9fb8e8', '#f7cfd9', '#ffe1c4'], fog: '#f6e3e4', tint: '#ffe8dc', sun: '#ffd8b8', sunI: 1.6, sunP: [110, 50, 30], hs: '#ffe0e6', hg: '#f0e2d4', hi: 1.3, night: .12, exp: 1.08 },
+    day:   { w: 0, sun: '#fff0dc', sunI: 1.7, sunP: [70, 120, 60], hs: '#dcecff', hg: '#f4e6d6', hi: 1.25, night: 0, exp: 1.06 },
+    dusk:  { w: .8, sky: ['#8f9fdc', '#f6c2bc', '#ffd6a8'], fog: '#f2d2cb', tint: '#ffd6bd', sun: '#ffbd88', sunI: 1.5, sunP: [-110, 42, 40], hs: '#f8d2c8', hg: '#e8d6c6', hi: 1.18, night: .4, exp: 1.08 },
+    night: { w: 1, sky: ['#141d45', '#2c3670', '#4f5590'], fog: '#2c3664', tint: '#56619c', sun: '#a9bdf0', sunI: .5, sunP: [-40, 110, -70], hs: '#5d6db0', hg: '#2c3354', hi: .62, night: 1, exp: 1.12 }
+  };
+  W.tod = { key: 'day', k: 1, from: null, to: null };
+  W.nightMats = []; W.glows = []; W.lampMats = [];
+  function nightWindows(cols, rows, litRatio = .6) {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    x.fillStyle = '#000'; x.fillRect(0, 0, 128, 128); const cw = 128 / cols, rh = 128 / rows;
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) if (Math.random() < litRatio) { x.fillStyle = Math.random() < .3 ? '#ffe3a8' : '#ffc96b'; x.fillRect(i * cw + cw * .2, j * rh + rh * .25, cw * .6, rh * .5); }
+    const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.RepeatWrapping; return t;
+  }
+  function litMaterial(mat, nightMap, col = '#ffffff', k = 1.3) { mat.emissive = new T.Color(col); mat.emissiveMap = nightMap; mat.emissiveIntensity = 0; mat.userData.nightK = k; W.nightMats.push(mat); return mat; }
+  function glowSprite(col = '#ffd98a', size = 3) {
+    if (!W._glowTex) { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.25, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); W._glowTex = new T.CanvasTexture(c); }
+    const s = new T.Sprite(new T.SpriteMaterial({ map: W._glowTex, color: col, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }));
+    s.scale.set(size, size, 1); s.visible = false; W.glows.push(s); return s;
+  }
+  function buildNightSky() {
+    const N = 700, g = new T.BufferGeometry(), p = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { const a = Math.random() * Math.PI * 2, e = Math.acos(Math.random() * .85), r = 850; p.set([Math.cos(a) * Math.sin(e) * r, Math.cos(e) * r, Math.sin(a) * Math.sin(e) * r], i * 3); }
+    g.setAttribute('position', new T.BufferAttribute(p, 3));
+    W.stars = new T.Points(g, new T.PointsMaterial({ color: '#ffffff', size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+    W.scene.add(W.stars);
+    const moon = W.moon = glowSprite('#fff6dc', 60); moon.position.set(-260, 300, -520); moon.material.fog = false; W.scene.add(moon);
+    const disc = new T.Mesh(new T.CircleGeometry(14, 32), new T.MeshBasicMaterial({ color: '#fffbe8', transparent: true, opacity: 0, fog: false })); disc.position.copy(moon.position); disc.lookAt(0, 0, 0); W.scene.add(disc); W.moonDisc = disc;
+    // 夜景點燈：101、中正橋拱、市府招牌
+    W.scene.traverse(o => { const m = o.material; if (!m || Array.isArray(m) || !m.isMeshToonMaterial) return;
+      const c = '#' + m.color.getHexString();
+      if (c === '9fd3c9' || c === 'f6f7fb') { if (!m.userData.lit) { m.userData.lit = 1; m.emissive = new T.Color(c === '9fd3c9' ? '#5fe0d0' : '#cfe4ff'); m.emissiveIntensity = 0; m.userData.nightK = c === '9fd3c9' ? .45 : .7; W.nightMats.push(m); } } });
+  }
+  function lookFor(key) {
+    const t = TOD[key], s = W.seasonLook || {};
+    const mixC = (a, b, w) => new T.Color(a).lerp(new T.Color(b), w);
+    const sky = (s.sky || ['#8fc4ef', '#cfe6fb', '#fde8ea']).map((c, i) => t.sky ? mixC(c, t.sky[i], t.w) : new T.Color(c));
+    return { sky, fog: t.fog ? mixC(s.fog || '#eef1fa', t.fog, t.w) : new T.Color(s.fog || '#eef1fa'), tint: t.tint ? mixC(s.tint || '#ffffff', t.tint, t.w) : new T.Color(s.tint || '#ffffff'),
+      sun: new T.Color(t.sun), sunI: t.sunI, sunP: new V3(...t.sunP), hs: new T.Color(t.hs), hg: new T.Color(t.hg), hi: t.hi, night: t.night, exp: t.exp };
+  }
+  function autoTodKey(d = new Date()) { const h = d.getHours() + d.getMinutes() / 60; return h >= 5 && h < 7.5 ? 'dawn' : h >= 7.5 && h < 16.5 ? 'day' : h >= 16.5 && h < 19 ? 'dusk' : 'night'; }
+  function setTime(key) {
+    W.todMode = key; const k = key === 'auto' ? autoTodKey() : key;
+    W.tod.from = W.tod.cur || lookFor(k); W.tod.to = lookFor(k); W.tod.key = k; W.tod.k = W.tod.cur ? 0 : 1;
+  }
+  function applyLook(L) {
+    const u = W.skyMat.uniforms; u.top.value.copy(L.sky[0]); u.mid.value.copy(L.sky[1]); u.bot.value.copy(L.sky[2]);
+    W.scene.fog.color.copy(L.fog); W.panoMat.uniforms.haze.value.copy(L.fog); W.panoMat.uniforms.tint.value.copy(L.tint);
+    waterMats.forEach(m => m.uniforms.uSky && m.uniforms.uSky.value.copy(L.sky[1]));
+    W.sun.color.copy(L.sun); W.sun.intensity = L.sunI; W.sun.position.copy(L.sunP); W.hemi.color.copy(L.hs); W.hemi.groundColor.copy(L.hg); W.hemi.intensity = L.hi;
+    const n = L.night;
+    W.nightMats.forEach(m => (m.emissiveIntensity = n * (m.userData.nightK || 1)));
+    W.lampMats.forEach(m => m.color.setRGB(1 + n * 1.4, .95 + n * 1.1, .76 + n * .5));
+    W.glows.forEach(g => { g.visible = n > .05; g.material.opacity = n * .85; });
+    if (W.stars) { W.stars.material.opacity = Math.max(0, n - .4) * 1.6; W.moonDisc.material.opacity = Math.max(0, n - .3); W.moon.material.opacity = Math.max(0, n - .3) * .5; }
+    if (PP.final) { PP.final.uniforms.exposure.value = L.exp; PP.final.uniforms.bloom.value = .4 + n * .6; PP.final.uniforms.warm.value = 1 - n * .6; }
+    W.nightLevel = n;
+  }
+  function updateTod(dt) {
+    if (W.todMode === 'auto' && (W._todCheck = (W._todCheck || 0) + dt) > 30) { W._todCheck = 0; const k = autoTodKey(); if (k !== W.tod.key) setTime('auto'); }
+    if (!W.tod.to) return;
+    if (W.tod.k < 1) W.tod.k = Math.min(1, W.tod.k + dt / 2.5);
+    else if (W.tod.cur && W.tod.applied) return;
+    const a = W.tod.from, b = W.tod.to, k = W.tod.k, lc = (x, y) => x.clone().lerp(y, k), ln = (x, y) => x + (y - x) * k;
+    const L = { sky: a.sky.map((c, i) => lc(c, b.sky[i])), fog: lc(a.fog, b.fog), tint: lc(a.tint, b.tint), sun: lc(a.sun, b.sun), sunI: ln(a.sunI, b.sunI), sunP: a.sunP.clone().lerp(b.sunP, k),
+      hs: lc(a.hs, b.hs), hg: lc(a.hg, b.hg), hi: ln(a.hi, b.hi), night: ln(a.night, b.night), exp: ln(a.exp, b.exp) };
+    W.tod.cur = L; applyLook(L); W.tod.applied = W.tod.k >= 1;
   }
 
   /* =====================================================================
@@ -1829,6 +2100,7 @@
     buildTraffic();
     buildWalkers();
     buildNPCs();
+    buildGroundDetail();
     const mat = new T.MeshBasicMaterial({ visible: false });
     window.ZONES.forEach(z => {
       const [x, zz] = z.pos;
@@ -1852,7 +2124,7 @@
   };
   W.cam = cam;
 
-  function flyTo(id) {
+  function flyTo(id, instant) {
     const z = zoneById(id); if (!z) return;
     const [x, zz] = z.pos;
     if (W.mode === 'explore') {   // 探索模式：傳送到該處入口前
@@ -1860,6 +2132,7 @@
       const d = id === 'hub' ? 40 : 16;
       const px = id === 'hub' ? 0 : x - ux * d, pz = id === 'hub' ? 40 : zz - uz * d;
       cam.fp = { from: cam.pos.clone(), to: new V3(px, 2.4, pz), yawTo: Math.atan2(-(x - px), -(zz - pz)), t0: performance.now() };
+      if (instant) { cam.pos.copy(cam.fp.to); cam.yaw = cam.fp.yawTo; cam.vel && cam.vel.set(0, 0, 0); cam.fp = null; }
       return;
     }
     let tgt, dist, az, el;
@@ -1948,9 +2221,25 @@
       cam.bob = (cam.bob || 0) + dt * speed * .9;
       cam.pos.y = 2.4 + (W.reduced ? 0 : Math.sin(cam.bob) * .08) * Math.min(1, speed / 8) + bridgeLift(cam.pos) + hill(cam.pos.x, cam.pos.z);
     }
-    W.camera.position.copy(cam.pos);
     const look = new V3(-Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.cos(cam.yaw) * Math.cos(cam.pitch));
-    W.camera.lookAt(cam.pos.clone().add(look));
+    const av = W.avatar;
+    if (W.view === 'third' && av) {
+      // 第三人稱：主角走在畫面中央，鏡頭在身後上方
+      const gy = hill(cam.pos.x, cam.pos.z) + bridgeLift(cam.pos);
+      av.visible = true; av.position.set(cam.pos.x, gy + .1, cam.pos.z);
+      const sp = cam.vel.length();
+      if (sp > .5) { const yaw = Math.atan2(cam.vel.x, cam.vel.z); av.rotation.y += (nearestAngle(av.rotation.y, yaw) - av.rotation.y) * Math.min(1, dt * 10); }
+      av.userData.anim(W.clock.elapsedTime, dt, false, sp > .8);
+      const back = new V3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw)), dist = 6.5;
+      const cp = new V3(cam.pos.x + back.x * dist, 0, cam.pos.z + back.z * dist);
+      cp.y = Math.max(gy + 3.2 - cam.pitch * 5, hill(cp.x, cp.z) + 1.5);
+      W.camera.position.lerp(cp, Math.min(1, dt * 8));
+      W.camera.lookAt(cam.pos.x - back.x * 3, gy + 1.6 + cam.pitch * 4, cam.pos.z - back.z * 3);
+    } else {
+      if (av) av.visible = false;
+      W.camera.position.copy(cam.pos);
+      W.camera.lookAt(cam.pos.clone().add(look));
+    }
     // 接近提示
     let near = null, nd = 1e9;
     window.ZONES.forEach(z => { const [x, zz] = z.pos; const d = Math.hypot(cam.pos.x - x, cam.pos.z - (z.id === 'geo' ? zz : zz)); const lim = z.id === 'hub' ? 26 : 17; if (d < lim && d < nd) { nd = d; near = z.id; } });
@@ -2007,18 +2296,23 @@
     if (document.hidden) return;
     const dt = Math.min(W.clock.getDelta(), .05), t = W.clock.elapsedTime;
     W.updaters.forEach(f => f(t, dt));
+    updateTod(dt);
     waterMats.forEach(m => (m.uniforms.uTime.value = t));
     W.flowMats.forEach(m => (m.uniforms.uTime.value = t));
     if (W.mode === 'debug') { if (W.follow) { const o = W.follow, wp = o.getWorldPosition(new V3()), q = o.getWorldQuaternion(new T.Quaternion());
         W.camera.position.copy(wp).add(new V3(4.5, 2.6, 2.5).applyQuaternion(q)); W.camera.lookAt(wp.clone().add(new V3(0, 1.2, 0))); } }
     else if (W.mode === 'explore') updateExplore(dt); else updateOverview(dt, t);
     applyViewOffset(dt);
-    W.renderer.render(W.scene, W.camera);
+    if (PP.on) {
+      const f = PP.final.uniforms;
+      if (W.mode === 'overview') { f.focus.value = cam.dist; f.dof.value = W.reduced ? 0 : .85; f.nearK.value = 1; } else { f.focus.value = 90; f.dof.value = .45; f.nearK.value = 0; }
+      PP.run(W.scene, W.camera);
+    } else W.renderer.render(W.scene, W.camera);
     W.listeners.frame.forEach(f => f());
     // 自動畫質：持續低於 30fps 改用省電
     frames++; fpsT += dt;
     if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0;
-      if (W.quality === 'auto' && fps < 30 && ++lowCount >= 3) { lowCount = 0; W.renderer.setPixelRatio(Math.max(1, W.renderer.getPixelRatio() - .5)); }
+      if (W.quality === 'auto' && fps < 30 && ++lowCount >= 3) { lowCount = 0; if (W.renderer.getPixelRatio() > 1) W.renderer.setPixelRatio(Math.max(1, W.renderer.getPixelRatio() - .5)); else if (PP.on) setPost(false); if (PP.resize) PP.resize(); }
       W.fps = Math.round(fps); }
   }
 
@@ -2039,12 +2333,17 @@
   window.World = {
     init, flyTo, setMode, setSeason, setQuality, projectZones, overviewHome,
     setViewShift: v => { viewShiftGoal = v; },
+    setTime: k => setTime(k), get timeMode() { return W.todMode; }, get night() { return W.nightLevel || 0; },
+    setView: v => { W.view = v; if (v === 'third' && W.avatar) W.camera.position.set(cam.pos.x, cam.pos.y + 3, cam.pos.z + 6); },
+    get view() { return W.view || 'first'; },
+    setAvatar: g => { if (W.avatar) W.scene.remove(W.avatar); W.avatar = makeNPC(g === 'f' ? 'playerF' : 'player'); W.avatar.visible = false; W.scene.add(W.avatar); W.avatarG = g; },
     setReducedMotion: v => { W.reduced = v; if (W.particleMat) W.particleMat.visible = !v; },
     projectNPC: id => { const n = W.npcs.find(x => x.id === id); if (!n) return null;
       const h = n.obj ? 2.9 : n.data.outfit === 'god' ? 4.4 : 3.4; tmp.set(n.pos.x, n.pos.y + h, n.pos.z).project(W.camera);
       const c = W.renderer.domElement; return { x: (tmp.x + 1) / 2 * c.clientWidth, y: (1 - tmp.y) / 2 * c.clientHeight, visible: tmp.z < 1 }; },
     teleport: (x, z, yaw) => { cam.fp = null; cam.pos.set(x, 2.4, z); cam.yaw = yaw; cam.vel.set(0, 0, 0); },
     npcWave: id => { const n = W.npcs.find(x => x.id === id); if (n) n.wave = 1.6; },
+    npcTalk: (id, sec) => { const n = W.npcs.find(x => x.id === id); if (n) n.talkUntil = W.clock.elapsedTime + sec; },
     listenerPos: () => (W.mode === 'explore' ? cam.pos : cam.target),
     riverDistance: (x, z) => nearRiver(x, z),
     get rollerPos() { return W.roller && W.roller.getWorldPosition(new V3()); },

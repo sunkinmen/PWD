@@ -42,9 +42,9 @@ window.ZONES = [
     subtitle: '統籌臺北市道路橋樑、防洪治水、公園綠地、污水處理與坡地保育五大工程領域，以環狀路網與水系串連五大工程處，守護永續臺北。',
     officialUrl: 'https://pwd.gov.taipei/',
     metrics: [
-      { label: '所屬工程處', value: '5', unit: '處' },
-      { label: '年度重大工程', value: '328', unit: '件' },
-      { label: '市民滿意度', value: '94.6', unit: '%' }
+      { ico: 'building', trend: 'flat', label: '所屬工程處', value: '5', unit: '處' },
+      { ico: 'chart', trend: 'up', label: '年度重大工程', value: '328', unit: '件' },
+      { ico: 'smile', trend: 'up', label: '市民滿意度', value: '94.6', unit: '%' }
     ],
     services: [
       { name: '施政成果與計畫', icon: '📘', url: 'https://pwd.gov.taipei/' },
@@ -69,9 +69,9 @@ window.ZONES = [
     subtitle: '掌管全市道路鋪面品質、跨河橋樑新建與耐震補強、人行無障礙改善及共同管道，以微創刨鋪守護市民行的安全與平坦。',
     officialUrl: 'https://nco.gov.taipei/',
     metrics: [
-      { label: '道路養護面積', value: '2,380', unit: '萬㎡' },
-      { label: '管養橋樑', value: '351', unit: '座' },
-      { label: '共同管道', value: '142.8', unit: 'km' }
+      { ico: 'road', trend: 'up', label: '道路養護面積', value: '2,380', unit: '萬㎡' },
+      { ico: 'bridge', trend: 'flat', label: '管養橋樑', value: '351', unit: '座' },
+      { ico: 'pipe', trend: 'up', label: '共同管道', value: '142.8', unit: 'km' }
     ],
     services: [
       { name: '路平專案施工預告', icon: '🛣️', url: 'https://nco.gov.taipei/' },
@@ -96,9 +96,9 @@ window.ZONES = [
     subtitle: '守護臺北盆地防洪安全，操控全市抽水站與疏散門，同時經營河濱公園與水岸自行車道，讓市民親水又安心。',
     officialUrl: 'https://heo.gov.taipei/',
     metrics: [
-      { label: '抽水站', value: '89', unit: '座' },
-      { label: '河濱自行車道', value: '112', unit: 'km' },
-      { label: '河濱公園', value: '29', unit: '座' }
+      { ico: 'drop', trend: 'up', label: '抽水站', value: '89', unit: '座' },
+      { ico: 'bike', trend: 'up', label: '河濱自行車道', value: '112', unit: 'km' },
+      { ico: 'park', trend: 'flat', label: '河濱公園', value: '29', unit: '座' }
     ],
     services: [
       { name: '河濱場地租借', icon: '🗓️', url: 'https://heo.gov.taipei/' },
@@ -123,9 +123,9 @@ window.ZONES = [
     subtitle: '打造四季花展與共融公園，撫育隨風搖曳的都市樹木，並以智慧 LED 路燈溫暖守護每一條街道。',
     officialUrl: 'https://pkl.gov.taipei/',
     metrics: [
-      { label: '都市公園', value: '1,020+', unit: '處' },
-      { label: '智慧路燈', value: '17.6', unit: '萬盞' },
-      { label: '行道樹', value: '10.8', unit: '萬株' }
+      { ico: 'park', trend: 'up', label: '都市公園', value: '1,020+', unit: '處' },
+      { ico: 'bulb', trend: 'up', label: '智慧路燈', value: '17.6', unit: '萬盞' },
+      { ico: 'tree', trend: 'up', label: '行道樹', value: '10.8', unit: '萬株' }
     ],
     services: [
       { name: '花展活動資訊', icon: '🌸', url: 'https://pkl.gov.taipei/' },
@@ -150,9 +150,9 @@ window.ZONES = [
     subtitle: '城市地底的淨化師！建置綿密污水管網與水資源回收中心，由「烏龜工程師」巡檢人孔，推動菸蒂不落水溝，守護河川水質。',
     officialUrl: 'https://sso.gov.taipei/',
     metrics: [
-      { label: '用戶接管率', value: '88.7', unit: '%' },
-      { label: '每日處理污水', value: '72', unit: '萬噸' },
-      { label: '再生水供應', value: '4.5', unit: '萬噸/日' }
+      { ico: 'pipe', trend: 'up', label: '用戶接管率', value: '88.7', unit: '%' },
+      { ico: 'drop', trend: 'flat', label: '每日處理污水', value: '72', unit: '萬噸' },
+      { ico: 'drop', trend: 'up', label: '再生水供應', value: '4.5', unit: '萬噸/日' }
     ],
     services: [
       { name: '用戶污水接管查詢', icon: '🏠', url: 'https://sso.gov.taipei/' },
@@ -177,9 +177,9 @@ window.ZONES = [
     subtitle: '與「山神爺爺」一起守護全市山坡地與溪溝安全，串聯臺北大縱走山徑，引領市民親山近自然。',
     officialUrl: 'https://geo.gov.taipei/',
     metrics: [
-      { label: '臺北大縱走', value: '130', unit: 'km' },
-      { label: '溪溝近自然整治', value: '68', unit: '條' },
-      { label: '坡地監測站', value: '100', unit: '% 連線' }
+      { ico: 'mountain', trend: 'flat', label: '臺北大縱走', value: '130', unit: 'km' },
+      { ico: 'drop', trend: 'up', label: '溪溝近自然整治', value: '68', unit: '條' },
+      { ico: 'chart', trend: 'up', label: '坡地監測站', value: '100', unit: '% 連線' }
     ],
     services: [
       { name: '臺北大縱走', icon: '🥾', url: 'https://geo.gov.taipei/' },

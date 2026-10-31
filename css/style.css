@@ -279,3 +279,124 @@ h1#title-h1 { font-size: clamp(38px, 5.4vw, 72px); line-height: 1.05; margin: 0 
   .btn-tasks { padding: 0 9px; }
 }
 @media (max-width: 400px) { .brand-text { display: none; } }
+
+/* =====================================================================
+ * v3 視覺升級：SVG 圖示、視覺小說對話、資訊卡、轉場、集章、手機上拉面板
+ * ===================================================================== */
+.ico { width: 20px; height: 20px; flex: 0 0 auto; vertical-align: -4px; }
+.icon-btn .ico { width: 19px; height: 19px; }
+.btn .ico { width: 17px; height: 17px; vertical-align: -3px; }
+.btn-stamps { gap: 4px; }
+.btn-stamps b { font-family: var(--font-en); font-size: 13px; font-weight: 800; }
+.btn-stamps.full { background: linear-gradient(135deg, #ffe08a, #ffb86b) !important; }
+
+/* ---------- 視覺小說式對話（固定畫面下方，大立繪＋表情切換）---------- */
+#npc-bubble { position: fixed; left: 50%; top: auto; bottom: calc(26px + var(--safe-b)); transform: translateX(-50%) !important; opacity: 1 !important;
+  width: min(780px, calc(100vw - 32px)); padding: 0 0 0 190px; min-height: 0; border: 0; background: none; box-shadow: none; z-index: 6; }
+#npc-bubble::after { display: none; }
+#npc-bubble[hidden] { display: none; }
+.vn-portrait { position: absolute; left: 0; bottom: 0; width: 200px; height: 200px; pointer-events: none; }
+#npc-avatar { position: static; width: 100%; height: 100%; border-radius: 28px; object-fit: cover; border: 4px solid #fff;
+  box-shadow: 0 0 0 3px var(--c, #4a7fd4), 0 16px 36px rgba(36, 48, 79, .3); background: #fff; transform-origin: 50% 100%; }
+#npc-avatar.pop { animation: vnpop .35s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes vnpop { 0% { transform: scale(.94) translateY(6px); } 100% { transform: none; } }
+.vn-box { position: relative; padding: 16px 22px 12px 34px; min-height: 128px; border-radius: 24px; background: rgba(255, 255, 255, .95);
+  border: 2px solid rgba(255, 255, 255, .9); box-shadow: 0 0 0 2px var(--c, #4a7fd4), 0 18px 40px rgba(36, 48, 79, .25);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.vn-box .npc-head { position: absolute; top: -16px; left: 22px; padding: 4px 14px; border-radius: 999px; background: var(--c, #4a7fd4); color: #fff; box-shadow: var(--shadow); }
+.vn-box .npc-head b { color: #fff; filter: none; font-size: 15px; }
+.vn-box .npc-head small { color: rgba(255, 255, 255, .88); }
+#npc-text { margin: 12px 0 4px; font-size: 17px; line-height: 1.75; min-height: 3.5em; }
+.npc-next { display: block; text-align: right; }
+.vn-arrow { font-style: normal; display: inline-block; color: var(--c, #4a7fd4); animation: bob 1s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(3px); } }
+#npc-bubble:has(#npc-avatar[hidden]) { padding-left: 0; }
+#npc-bubble:has(#npc-avatar[hidden]) .vn-portrait { display: none; }
+#npc-bubble.mood-worried .vn-box { box-shadow: 0 0 0 2px #f2a33a, 0 18px 40px rgba(36, 48, 79, .25); }
+#npc-bubble.mood-happy #npc-avatar { box-shadow: 0 0 0 3px var(--c, #4a7fd4), 0 0 26px rgba(255, 214, 102, .9), 0 16px 36px rgba(36, 48, 79, .3); }
+#explore-hud:has(#npc-bubble:not([hidden])) #prompt { display: none; }
+@media (max-width: 760px) {
+  #npc-bubble { bottom: calc(150px + var(--safe-b)); padding-left: 96px; }
+  .vn-portrait { width: 104px; height: 104px; bottom: 10px; }
+  #npc-avatar { border-radius: 20px; border-width: 3px; }
+  .vn-box { min-height: 0; padding: 14px 14px 8px 22px; }
+  #npc-text { font-size: 14.5px; min-height: 2.6em; margin-top: 10px; }
+}
+
+/* ---------- 資訊卡：圖示、趨勢、公告色條 ---------- */
+.card { position: relative; }
+.card .ico { display: block; width: 22px; height: 22px; color: var(--accent); margin-bottom: 4px; }
+.card .trend { position: absolute; top: 9px; right: 9px; display: inline-flex; align-items: center; height: 20px; padding: 0 6px 0 2px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; font-style: normal; color: #1f8a5b; background: #e1f5ea; }
+.card .trend .ico { width: 15px; height: 15px; margin: 0; color: currentColor; display: inline; }
+.card .trend.flat { color: #6a7390; background: #eef1f7; padding: 0 7px; }
+.card.news { padding-left: 62px; border-left: 0; }
+.card.news::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 5px; border-radius: 0 4px 4px 0; background: var(--tagc, var(--accent)); }
+.card.news .thumb { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border-radius: 12px; background: var(--accent-soft); padding: 4px; }
+.card.news .thumb svg { width: 100%; height: 100%; }
+.card.news small em { font-style: normal; color: #fff; background: var(--tagc, var(--accent)); padding: 1px 7px; border-radius: 999px; margin-left: 4px; }
+.news li time em { background: var(--tagc, var(--accent)) !important; color: #fff !important; }
+
+/* ---------- 手機：資訊面板可上拉展開 ---------- */
+.hero-grip { display: none; }
+@media (max-width: 760px) {
+  .hero-grip { display: block; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 80px; height: 22px; }
+  .hero-grip i { display: block; width: 42px; height: 5px; margin: 8px auto 0; border-radius: 3px; background: rgba(36, 48, 79, .25); }
+  #hero { padding-top: 24px; transition: transform .35s cubic-bezier(.2, .8, .2, 1); touch-action: pan-x; }
+  #hero .cards { display: none; }
+  #hero.open .cards { display: flex; }
+  #hero.open .hero-sub { display: block; font-size: 13px; margin: 0 0 10px; }
+  #hero.open .card.news { display: block; }
+}
+
+/* ---------- 世界轉場：雲朵擦拭 ---------- */
+#wipe { position: fixed; inset: 0; z-index: 70; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; visibility: hidden; }
+#wipe.run { visibility: visible; }
+.wipe-clouds { position: absolute; inset: -20%; opacity: 0;
+  background:
+    radial-gradient(closest-side, #fff 70%, transparent) 10% 20% / 46% 40% no-repeat,
+    radial-gradient(closest-side, #fff 70%, transparent) 55% 10% / 56% 46% no-repeat,
+    radial-gradient(closest-side, #fff 70%, transparent) 90% 35% / 50% 50% no-repeat,
+    radial-gradient(closest-side, #fff 70%, transparent) 20% 75% / 56% 50% no-repeat,
+    radial-gradient(closest-side, #fff 70%, transparent) 75% 85% / 60% 50% no-repeat,
+    radial-gradient(closest-side, var(--wc, #dbe8ff) 60%, transparent) 50% 50% / 70% 70% no-repeat,
+    linear-gradient(var(--wc, #dbe8ff), #fff); }
+#wipe.run .wipe-clouds { animation: clouds 1.25s cubic-bezier(.6, 0, .3, 1) both; }
+@keyframes clouds { 0% { opacity: 0; transform: scale(1.6) rotate(-4deg); } 38%, 58% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.5) rotate(4deg); } }
+.wipe-emblem { position: relative; width: 96px; height: 96px; opacity: 0; filter: drop-shadow(0 8px 20px rgba(36, 48, 79, .25)); }
+.wipe-emblem svg { width: 100%; height: 100%; }
+#wipe b { position: relative; margin-top: 10px; font-size: 26px; font-weight: 900; opacity: 0; color: var(--ink); text-shadow: 0 2px 0 #fff; }
+#wipe.run .wipe-emblem, #wipe.run b { animation: wipein 1.25s ease both; }
+@keyframes wipein { 0%, 25% { opacity: 0; transform: scale(.7); } 40%, 60% { opacity: 1; transform: none; } 80%, 100% { opacity: 0; transform: translateY(-10px); } }
+
+/* ---------- 工務護照（集章）---------- */
+.passport { background: linear-gradient(180deg, #fffaf0, #fff 40%); }
+.stamp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 14px 0 6px; }
+.stamp { position: relative; aspect-ratio: 1; border-radius: 50%; border: 3px dashed #d5dbe8; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #fff; color: #9aa3bb; font-size: 12px; font-weight: 700; text-align: center; padding: 8px; cursor: pointer; }
+.stamp svg { width: 46%; height: 46%; filter: grayscale(1) opacity(.35); }
+.stamp span { margin-top: 4px; line-height: 1.25; }
+.stamp.got { border: 4px double var(--c); color: var(--c); background: radial-gradient(circle, #fff 55%, color-mix(in srgb, var(--c) 12%, #fff)); transform: rotate(var(--r, -8deg)); }
+.stamp.got svg { filter: none; }
+.stamp.got time { position: absolute; bottom: 12%; font-family: var(--font-en); font-size: 10px; opacity: .8; }
+.stamp.just { animation: thump .5s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes thump { 0% { transform: scale(2.2) rotate(-20deg); opacity: 0; } 60% { transform: scale(.92) rotate(var(--r, -8deg)); opacity: 1; } 100% { transform: rotate(var(--r, -8deg)); } }
+.cert-row { display: flex; gap: 8px; margin-top: 14px; }
+.cert-row input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: 14px; border: 2px solid #e2e7f2; font: inherit; }
+#stamp-toast { position: fixed; left: 50%; top: 40%; z-index: 72; transform: translate(-50%, -50%); pointer-events: none; }
+#stamp-toast .stamp { width: 150px; box-shadow: 0 20px 50px rgba(36, 48, 79, .3); }
+
+/* ---------- 集滿慶祝 ---------- */
+#celebrate { position: fixed; inset: 0; z-index: 75; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(36, 48, 79, .45); }
+#celebrate[hidden] { display: none; }
+#confetti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cele-card { position: relative; width: min(440px, 100%); background: #fff; border-radius: 28px; padding: 86px 24px 20px; text-align: center; box-shadow: 0 24px 70px rgba(36, 48, 79, .4); animation: rise .5s both; }
+.cele-god { position: absolute; left: 50%; top: -70px; width: 140px; height: 140px; margin-left: -70px; border-radius: 50%; border: 5px solid #fff; box-shadow: 0 0 0 4px #ffd166, 0 0 40px rgba(255, 209, 102, .9); object-fit: cover; }
+.cele-card h3 { margin: 0 0 8px; font-size: 22px; font-weight: 900; }
+.cele-card p { margin: 0 0 18px; line-height: 1.75; color: var(--ink-2); }
+
+/* ---------- 選單：角色選擇 ---------- */
+.avatar-seg button { display: inline-flex; align-items: center; gap: 6px; }
+.av-chip { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 50% 70%, #ffd9b8 38%, transparent 40%), linear-gradient(#ffcc33 46%, #3a6fc4 46%); box-shadow: inset 0 0 0 2px #fff; }
+.av-chip.f { background: radial-gradient(circle at 50% 70%, #ffd9b8 38%, transparent 40%), linear-gradient(#ffffff 46%, #e0679a 46%); box-shadow: inset 0 0 0 2px #e0e5ef; }
+#seg-time { flex-wrap: wrap; }

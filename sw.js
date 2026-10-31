@@ -1,11 +1,11 @@
 /* sw.js ── 離線快取（PWA）
  * 策略：網頁／程式／內容「網路優先」（上傳新版自動生效，離線時用快取）；圖片音檔「快取優先」（第二次開啟秒開）
  * 更換大量圖片後，把 VERSION 改個數字即可清掉舊圖快取 */
-const VERSION = 'pwd3d-v1';
+const VERSION = 'pwd3d-v2';
 const CORE = [
   './', './index.html', './css/style.css', './manifest.json',
   './js/vendor/three.min.js', './js/content.js', './js/content-en.js', './js/i18n.js', './js/emblems.js',
-  './js/extras.js', './js/world.js', './js/audio.js', './js/ui.js',
+  './js/extras.js', './js/world.js', './js/audio.js', './js/icons.js', './js/ui.js',
   './brand.html', './assets/sky-taipei.jpg', './assets/tex/levee-mural.jpg', './assets/icons/icon-192.png'
 ];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });

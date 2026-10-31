@@ -1,0 +1,17 @@
+{
+  "name": "臺北工務 探索世界｜臺北市政府工務局",
+  "short_name": "工務探索",
+  "description": "以 3D 探索臺北市政府工務局與五大工程處",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#dfeefc",
+  "theme_color": "#dfeefc",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
