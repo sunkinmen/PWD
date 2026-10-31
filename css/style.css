@@ -238,3 +238,44 @@ h1#title-h1 { font-size: clamp(38px, 5.4vw, 72px); line-height: 1.05; margin: 0 
 .npc-next { font-size: 11px; color: var(--ink-2); font-weight: 700; }
 #npc-avatar { position: absolute; left: 10px; top: 12px; width: 72px; height: 72px; border-radius: 16px; object-fit: cover; border: 2px solid var(--c, #4a7fd4); background: #fff; }
 #npc-bubble:has(#npc-avatar[hidden]) { padding-left: 14px; min-height: 0; }
+
+/* ---------- 無障礙：焦點外框、文字放大、減少動態 ---------- */
+:focus-visible { outline: 3px solid #1f5fd1; outline-offset: 3px; border-radius: 10px; }
+.tile:focus-visible { outline-offset: 6px; border-radius: 24px; }
+#hud, .modal, #sheet, #a11y, #tour, #title, #festival { zoom: var(--fs, 1); }
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+.lang-btn { font: inherit; font-size: 13px; color: var(--ink); text-decoration: underline; padding: 0; }
+
+/* ---------- 節慶／防汛提示 ---------- */
+#festival { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
+  background: rgba(255, 255, 255, .92); border: 2px solid #ffd166; padding: 8px 10px 8px 16px; border-radius: 999px; box-shadow: var(--shadow); font-weight: 700; font-size: 14px; }
+#festival button { width: 26px; height: 26px; border-radius: 50%; background: #f3f5fa; font-size: 12px; flex: 0 0 auto; }
+@media (max-width: 760px) { #festival { top: auto; bottom: calc(230px + var(--safe-b)); font-size: 12px; } }
+
+/* ---------- 我要辦 ---------- */
+.btn-tasks { background: var(--ink) !important; color: #fff; }
+.btn-tasks em { color: #fff; }
+.tasks-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.task { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 16px; background: #f6f8fd; border-left: 5px solid var(--c); }
+.task-ico { font-size: 24px; }
+.task-body { flex: 1; min-width: 0; }
+.task-body b { display: block; font-size: 15px; }
+.task-body small { color: var(--ink-2); font-size: 12px; font-weight: 700; }
+.btn-sm { padding: 7px 12px; font-size: 13px; }
+@media (max-width: 760px) { .task { flex-wrap: wrap; } .task-body { flex-basis: calc(100% - 44px); } .btn-tasks em { display: inline !important; font-size: 12px; } }
+
+/* ---------- 新手導覽 ---------- */
+#tour { position: fixed; inset: 0; z-index: 55; background: rgba(36, 48, 79, .35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.tour-card { width: min(420px, 100%); background: #fff; border-radius: 26px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(54, 72, 120, .35); animation: rise .4s both; }
+.tour-card h3 { margin: 10px 0 6px; font-size: 22px; font-weight: 900; }
+.tour-card p { margin: 0 0 18px; line-height: 1.7; color: var(--ink-2); }
+.tour-dots { display: flex; gap: 6px; } .tour-dots i { width: 22px; height: 6px; border-radius: 3px; background: #dbe3f2; } .tour-dots i.on { background: var(--ink); }
+.tour-actions { display: flex; justify-content: space-between; }
+.icon-btn em, .brand-text b { white-space: nowrap; }
+@media (max-width: 760px) {
+  #festival { top: 140px; bottom: auto; font-size: 12px; padding: 6px 8px 6px 12px; }
+  .brand-text b { font-size: 13px; }
+  .top-right { gap: 6px; }
+  .btn-tasks { padding: 0 9px; }
+}
+@media (max-width: 400px) { .brand-text { display: none; } }

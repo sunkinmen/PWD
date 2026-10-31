@@ -15,19 +15,25 @@ window.SITE = {
   officialUrl: 'https://pwd.gov.taipei/',
   phone: '1999（外縣市請撥 02-2720-8889）',
   address: '110204 臺北市信義區市府路 1 號 4 樓',
+  siteUrl: 'https://sunkinmen.github.io/PWD/',   // 正式網址（分享連結用）
+  // ── 內容自動更新：Google 試算表「檔案 → 共用 → 發布到網路 → CSV」的網址貼這裡，留空則只用本檔內容
+  //    欄位：type(news/metric), zone(hub/nco/heo/pkl/sso/geo), date, tag, title, url, label, value, unit
+  sheetCsv: '',
+  // ── 使用數據：Google Analytics 4 評估 ID（G-XXXXXXX），留空則不追蹤
+  ga4Id: '',
   voiceFiles: false,                   // 有 ElevenLabs 等錄好的 mp3 放進 assets/voice/ 後改成 true（檔名見 README）
   skyImage: 'assets/sky-taipei.jpg',   // Nano Banana 2 生成的台北全景（找不到時自動改用程式繪製天空）
   updated: '2026-10-31'
 };
 
-/* 六個世界：hub = 局本部（中央），其餘五個工程處環繞
+/* 六個世界：hub = 工務局（中央），其餘五個工程處環繞
  * pos：在 3D 地圖上的位置 [x, z]（單位：公尺感，0,0 為市中心）——一般不需改
  * color：主題色（標籤、按鈕、卡片） */
 window.ZONES = [
   {
     id: 'hub',
-    shortName: '工務局本部',
-    title: '工務局本部',
+    shortName: '工務局',
+    title: '工務局',
     tagline: '五大工程的指揮中樞',
     badge: '市政核心',
     color: '#4a7fd4',
@@ -195,7 +201,7 @@ window.SEARCH_INDEX = [
   { keywords: '坑洞 路平 刨鋪 挖掘 橋 人行道 無障礙 共同管道', zone: 'nco', title: '路平專案・道路挖掘・橋樑' },
   { keywords: '污水 接管 下水道 後巷 菸蒂 水溝 再生水 烏龜', zone: 'sso', title: '污水接管・後巷美化・再生水' },
   { keywords: '登山 步道 大縱走 露營 山坡地 水土保持 山神', zone: 'geo', title: '臺北大縱走・山坡地查詢・露營' },
-  { keywords: '招標 施政 局本部 1999 陳情', zone: 'hub', title: '局本部・招標・1999 熱線' }
+  { keywords: '招標 施政 工務局 1999 陳情', zone: 'hub', title: '工務局・招標・1999 熱線' }
 ];
 
 /* =====================================================================
@@ -205,7 +211,7 @@ window.SEARCH_INDEX = [
  *  ● 每句可加 audio: 'assets/voice/xxx.mp3'（例如 ElevenLabs 生成的檔案），有檔案就播檔案，沒有就用瀏覽器內建台灣國語語音
  * ===================================================================== */
 window.NPCS = [
-  { id: 'hub-1', zone: 'hub', name: '小工', role: '局本部服務員', outfit: 'hub', voice: { pitch: 1.15, rate: 1.0, prefer: 'female' },
+  { id: 'hub-1', zone: 'hub', name: '小工', role: '工務局服務員', outfit: 'hub', voice: { pitch: 1.15, rate: 1.0, prefer: 'female' },
     greet: ['歡迎來到工務局！今天天氣很好，要不要到處走走？', '嗨～第一次來嗎？五個工程處都在環狀道路旁邊喔！'],
     lines: ['工務局統籌道路、水利、公園、下水道跟山坡地，五個工程處一起守護臺北。',
             '市政府前面這條彩虹步道很好拍喔，記得順便看看 101！',
@@ -247,4 +253,31 @@ window.NPCS = [
   { id: 'god', zone: 'geo', name: '山神爺爺', role: '坡地守護神', outfit: 'god', voice: { pitch: .7, rate: .88, prefer: 'male' },
     greet: ['呵呵呵，年輕人，歡迎來到山上。'],
     lines: ['山要有樹，土才抓得住；大家愛護山林，山也會保護大家。', '下雨天別往溪邊走，看見落石就繞道，平安最重要啊。'] }
+];
+
+/* =====================================================================
+ * 「我要辦」常用服務（首頁一鍵直達）
+ * ===================================================================== */
+window.TASKS = [
+  { icon: '💡', title: '路燈不亮報修', zone: 'pkl', url: 'https://pkl.gov.taipei/' },
+  { icon: '🕳️', title: '路面坑洞・路平施工', zone: 'nco', url: 'https://nco.gov.taipei/' },
+  { icon: '🏞️', title: '河濱場地租借', zone: 'heo', url: 'https://heo.gov.taipei/' },
+  { icon: '🚪', title: '疏散門開關資訊', zone: 'heo', url: 'https://heo.gov.taipei/' },
+  { icon: '🏠', title: '污水接管查詢', zone: 'sso', url: 'https://sso.gov.taipei/' },
+  { icon: '⛰️', title: '山坡地範圍查詢', zone: 'geo', url: 'https://geo.gov.taipei/' },
+  { icon: '🥾', title: '臺北大縱走', zone: 'geo', url: 'https://geo.gov.taipei/' },
+  { icon: '☎️', title: '1999 市民熱線', zone: 'hub', url: 'https://pwd.gov.taipei/' }
+];
+
+/* =====================================================================
+ * 節慶／季節版本：日期到了自動切換（月-日；可跨年），沒有對應期間就依月份自動選季節
+ *  ● season：spring/summer/autumn/winter　● banner：頂部提示　● lines：追加到 NPC 的台詞
+ * ===================================================================== */
+window.FESTIVALS = [
+  { id: 'flower', from: '02-01', to: '04-15', season: 'spring', banner: '🌸 臺北花季登場！到公園處賞杜鵑、櫻花',
+    lines: { 'pkl-1': ['花季到了！大安森林公園的杜鵑花開得正美，歡迎來走走。'] } },
+  { id: 'flood', from: '05-01', to: '11-30', banner: '☔ 防汛期間：豪雨時請遠離河濱與溪邊，留意疏散門關閉通知',
+    lines: { 'heo-1': ['現在是防汛期，颱風來之前我們會先檢查所有抽水站。'], 'geo-1': ['颱風天請不要上山，等坡地巡查完成再來喔。'], 'god': ['風雨將至，年輕人且在家中安歇，山林自有老夫守護。'] } },
+  { id: 'xmas', from: '12-15', to: '01-02', season: 'winter', banner: '🎄 聖誕跨年快樂！市府周邊交通管制請留意公告',
+    lines: { 'hub-1': ['跨年活動在市府前，記得搭捷運最方便！'] } }
 ];

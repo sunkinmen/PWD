@@ -114,6 +114,7 @@
     lv.kids = clamp((1 - park / 40) * .9, 0, 1) + clamp((1 - hub / 30) * .45, 0, .45);
     const t = ac.currentTime, set = (k, v) => gains[k] && gains[k].gain.setTargetAtTime(v, t, .6);
     set('water', .32 * lv.water + .25 * lv.fall);
+    const rp = World.rollerPos; set('engine', rp ? .3 * clamp(1 - dist([rp.x, rp.z]) / 28, 0, 1) ** 1.5 : 0);
     set('wind', .05 + .03 * Math.sin(t * .2));
     set('cicada', (season === 'summer' ? .03 : season === 'autumn' ? .015 : 0) * lv.insects);
   }
@@ -128,6 +129,12 @@
     const cf = ac.createBiquadFilter(); cf.type = 'bandpass'; cf.frequency.value = 5200; cf.Q.value = 4;
     const amNode = ac.createGain(); amNode.gain.value = .5; const am = ac.createOscillator(), amg = ac.createGain(); am.frequency.value = 55; amg.gain.value = .5; am.connect(amg).connect(amNode.gain); am.start();
     const cg = ac.createGain(); cg.gain.value = 0; cs.connect(cf).connect(amNode).connect(cg).connect(master); cs.start(); gains.cicada = cg;
+    // 壓路機柴油引擎聲＋振動輪低頻（靠近新工處施工區才聽得到）
+    const eng = ac.createGain(); eng.gain.value = 0; eng.connect(master); gains.engine = eng;
+    const lp2 = ac.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 420; const am2 = ac.createGain(); am2.gain.value = .65; lp2.connect(am2).connect(eng);
+    [[38, 'sawtooth', .5], [76, 'square', .18], [29, 'sine', .6]].forEach(([f, type, v]) => { const o = ac.createOscillator(), og = ac.createGain(); o.type = type; o.frequency.value = f; og.gain.value = v; o.connect(og).connect(lp2); o.start(); });
+    const rum = ac.createBufferSource(); rum.buffer = noiseBuf('brown'); rum.loop = true; const rg = ac.createGain(); rg.gain.value = .9; rum.connect(rg).connect(lp2); rum.start();
+    const putt = ac.createOscillator(), pg = ac.createGain(); putt.frequency.value = 11; pg.gain.value = .35; putt.connect(pg).connect(am2.gain); putt.start();
     every(bird, 700, 2600); every(bird, 1500, 4200);
     every(cricket, 900, 2200);
     every(kids, 1800, 4500);
@@ -158,8 +165,9 @@
   }
   function tts(text, cfg) {
     if (!('speechSynthesis' in window) || !voiceOn) return;
-    const u = new SpeechSynthesisUtterance(text); u.lang = 'zh-TW';
-    const v = pickVoice(cfg.prefer); if (v) u.voice = v;
+    const en = cfg.lang === 'en';
+    const u = new SpeechSynthesisUtterance(text); u.lang = en ? 'en-US' : 'zh-TW';
+    const v = en ? (voices.filter(x => /^en/i.test(x.lang)).sort((a, b) => (/natural|online/i.test(b.name) ? 1 : 0) - (/natural|online/i.test(a.name) ? 1 : 0))[0] || null) : pickVoice(cfg.prefer); if (v) u.voice = v;
     // 同一個聲音用音高區分男女
     const sameVoice = v && !(cfg.prefer === 'female' ? FEMALE : MALE).test(v.name);
     u.pitch = clamp((cfg.pitch || 1) * (sameVoice ? (cfg.prefer === 'male' ? .82 : 1.12) : 1), .1, 2);

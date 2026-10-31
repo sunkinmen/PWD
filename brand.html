@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>品牌設計規範｜臺北工務 探索世界</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #24304f; --ink-2: #56607e; --line: rgba(44, 53, 84, .14); }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Noto Sans TC', sans-serif; color: var(--ink); background: #f7f9fd; line-height: 1.7; }
+  header { padding: 48px 6vw 32px; background: linear-gradient(120deg, #dbe8ff, #fde8ea 60%, #e6f6ea); }
+  header h1 { margin: 0; font-size: clamp(28px, 4vw, 44px); font-weight: 900; }
+  header p { margin: 6px 0 0; color: var(--ink-2); }
+  main { padding: 10px 6vw 60px; max-width: 1200px; }
+  h2 { font-size: 24px; margin: 44px 0 6px; padding-left: 12px; border-left: 6px solid var(--ink); }
+  h3 { margin: 18px 0 6px; font-size: 17px; }
+  .lead { color: var(--ink-2); margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+  .card { background: #fff; border-radius: 18px; padding: 14px; border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(54, 72, 120, .08); }
+  .sw { height: 70px; border-radius: 12px; margin-bottom: 8px; border: 1px solid var(--line); }
+  .code { font-family: Outfit, monospace; font-size: 13px; color: var(--ink-2); }
+  .emb svg { width: 96px; height: 96px; display: block; margin: 0 auto 6px; }
+  .emb { text-align: center; }
+  .npc img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 14px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 14px; overflow: hidden; }
+  td, th { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: #eef2fa; }
+  .do { border-left: 6px solid #5cb87a; } .dont { border-left: 6px solid #e0707e; }
+  .type1 { font-size: 44px; font-weight: 900; } .type2 { font-size: 22px; font-weight: 700; } .type3 { font-size: 15px; } .type4 { font-family: Outfit; font-weight: 800; letter-spacing: .28em; font-size: 12px; }
+</style>
+</head>
+<body>
+<header><h1>品牌設計規範</h1><p>臺北工務 探索世界｜臺北市政府工務局・五大工程處共用。新增內容或場景前請先對照本頁，維持一致風格。</p></header>
+<main>
+  <h2>1. 品牌精神</h2>
+  <p class="lead">「粉彩柔和的動漫風，但不失工程專業」。親切、明亮、可信賴；用說故事的方式介紹工程，不用艱澀術語。</p>
+  <div class="grid">
+    <div class="card"><b>親近</b><br>像鄰居一樣打招呼，用「您／你」直接對話。</div>
+    <div class="card"><b>專業</b><br>數據準確、來源明確，造型參照真實工程設施。</div>
+    <div class="card"><b>自然</b><br>強調綠意、水、山林與市民生活的連結。</div>
+  </div>
+
+  <h2>2. 色彩</h2>
+  <h3>主色與介面</h3>
+  <div class="grid" id="ui-colors"></div>
+  <h3>六大世界主題色（content.js 的 color／soft）</h3>
+  <div class="grid" id="zone-colors"></div>
+
+  <h2>3. 字體</h2>
+  <div class="card">
+    <div class="type4">TAIPEI PUBLIC WORKS · EXPLORE</div>
+    <div class="type1">臺北工務 探索世界</div>
+    <div class="type2">新建工程處｜道路與橋樑的世界</div>
+    <div class="type3">內文：Noto Sans TC 400–500，行高 1.7；數字與英文：Outfit。最小字級 12px，手機正文 14px 以上。</div>
+  </div>
+  <table style="margin-top:12px"><tr><th>用途</th><th>字體／字重</th><th>大小</th></tr>
+    <tr><td>大標題</td><td>Noto Sans TC 900</td><td>38–76px（依畫面寬度）</td></tr>
+    <tr><td>區塊標題</td><td>Noto Sans TC 900</td><td>20–48px</td></tr>
+    <tr><td>內文、按鈕</td><td>Noto Sans TC 500／700</td><td>14–17px</td></tr>
+    <tr><td>數字、英文標籤</td><td>Outfit 600／800</td><td>11–26px</td></tr>
+    <tr><td>招牌（3D 場景內）</td><td>Noto Serif TC 900（市府、中正橋）／Noto Sans TC 900（工程設施）</td><td>依物件</td></tr>
+  </table>
+
+  <h2>4. 徽章</h2>
+  <p class="lead">64×64 圓角方形、深藍 #2c3554 線稿 2.4px、上淡下白漸層、右上角主題色小圓點。不可變形、不可改線色、不可加陰影以外效果。</p>
+  <div class="grid" id="emblems"></div>
+
+  <h2>5. 角色</h2>
+  <p class="lead">Q 版日系動漫風、乾淨線稿、柔和上色、友善微笑。服裝必須對應業務（安全帽顏色、反光背心、雨衣等）。頭像以 Nano Banana 2 生成，256×256，檔名＝NPC id。</p>
+  <div class="grid" id="npcs"></div>
+
+  <h2>6. 3D 場景風格</h2>
+  <table>
+    <tr><th>項目</th><th>規則</th></tr>
+    <tr><td>上色</td><td>卡通四階明暗（Toon），飽和度偏低的粉彩色；避免純黑、純白大面積</td></tr>
+    <tr><td>描邊</td><td>深藍 #3b4466 外框線，大型物件 0.12–0.16，小物件 0.02–0.06</td></tr>
+    <tr><td>造型</td><td>代表性設施須參照實物（市府雙十字、101 竹節、新中正橋鋼拱、象山步道、大安森林公園音樂台）</td></tr>
+    <tr><td>方位</td><td>-z 為北（大地處山區）、+x 為東（101 在市府東側）</td></tr>
+    <tr><td>動態</td><td>每區至少一項會動的元素（車、水、樹、角色）；動作溫和，不閃爍過快</td></tr>
+    <tr><td>背景</td><td>Nano Banana 2 生成的台北全景，21:9、下方 1/3 霧化</td></tr>
+  </table>
+
+  <h2>7. 文字語氣</h2>
+  <div class="grid">
+    <div class="card do"><b>✓ 這樣寫</b><br>「下大雨時，抽水站會把雨水抽到河裡，守護大家不淹水。」</div>
+    <div class="card dont"><b>✗ 避免</b><br>「本處依據排水計畫辦理抽水站機組汰換暨操作維護事宜。」</div>
+    <div class="card do"><b>✓ 這樣寫</b><br>「路燈不亮？記下燈桿編號，報修更快喔。」</div>
+    <div class="card dont"><b>✗ 避免</b><br>全形驚嘆號連用、網路流行語、未經確認的數據。</div>
+  </div>
+
+  <h2>8. 圖片生成提示詞範本（Nano Banana 2）</h2>
+  <div class="card code">粉彩柔和的日系動漫手繪風、細緻線稿、低飽和、明亮晴天；主題：＿＿＿；不要文字、不要浮水印、不要真人肖像；比例：＿＿＿</div>
+</main>
+<script src="js/content.js"></script>
+<script src="js/emblems.js"></script>
+<script>
+  const ui = [['墨藍（文字、主按鈕）', '#24304f'], ['次要文字', '#56607e'], ['描邊', '#3b4466'], ['底色', '#dfeefc'], ['玻璃白', 'rgba(255,255,255,.72)'], ['焦點外框', '#1f5fd1']];
+  document.getElementById('ui-colors').innerHTML = ui.map(([n, c]) => `<div class="card"><div class="sw" style="background:${c}"></div><b>${n}</b><div class="code">${c}</div></div>`).join('');
+  document.getElementById('zone-colors').innerHTML = ZONES.map(z => `<div class="card"><div class="sw" style="background:linear-gradient(90deg,${z.color} 50%,${z.soft} 50%)"></div><b>${z.title}</b><div class="code">主 ${z.color}／淡 ${z.soft}</div></div>`).join('');
+  document.getElementById('emblems').innerHTML = ZONES.map(z => `<div class="card emb">${EMBLEMS[z.id]}<b>${z.shortName}</b></div>`).join('');
+  document.getElementById('npcs').innerHTML = NPCS.map(n => `<div class="card npc"><img src="assets/npc/${n.id}.jpg" alt="${n.name}"><b>${n.name}</b><div class="code">${n.role}｜id: ${n.id}</div></div>`).join('');
+</script>
+</body>
+</html>

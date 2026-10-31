@@ -361,7 +361,7 @@
     const curbMat = toon('#f6efe2');
     [LOOP_R + 3.9, LOOP_R - 3.9].forEach(rr => { const m = new T.Mesh(new T.TorusGeometry(rr, 0.35, 6, 128), curbMat); m.rotation.x = Math.PI / 2; m.position.y = 0.15; m.receiveShadow = true; W.scene.add(m); });
 
-    // 放射步道（局本部 → 各處）＋流動光帶（串連感）
+    // 放射步道（工務局 → 各處）＋流動光帶（串連感）
     const pathMat = toon('#efe3cf');
     W.flowMats = [];
     window.ZONES.filter(z => z.id !== 'hub').forEach(z => {
@@ -393,7 +393,8 @@
 
     // 新工處：跨河支線（含斜張橋段）
     const spur = W.spur = new T.CatmullRomCurve3([new V3(-22, 0, 26), new V3(-36, 0, 44), new V3(-42, 0, 62), new V3(-44, 0, 82), new V3(-48, 0, 104)]);
-    W.spurY = t => 0.12 + 1.6 * Math.exp(-Math.pow((t - 0.47) / 0.13, 2));
+    W.spurY = t => { const d = Math.abs(t - .47), k = Math.min(1, Math.max(0, (d - .185) / .12)); return 0.12 + 2.6 * (1 - k * k * (3 - 2 * k)); };
+    W.spurSamples = Array.from({ length: 161 }, (_, i) => { const p = spur.getPointAt(i / 160); p.t = i / 160; return p; });
     const sm = new T.Mesh(ribbon(spur, 6.5, 120, W.spurY, 1.6), roadMat); sm.receiveShadow = true; sm.castShadow = true; W.scene.add(sm);
   }
 
@@ -482,7 +483,7 @@
   }
 
   /* =====================================================================
-   * 局本部：市府大樓＋臺北101＋全像連結環
+   * 工務局：市府大樓＋臺北101＋全像連結環
    * ===================================================================== */
   function windowTex(base = '#f3eee6', win = '#a9cdee', cols = 8, rows = 6) {
     const c = document.createElement('canvas'); c.width = 128; c.height = 128; const x = c.getContext('2d');
@@ -623,60 +624,146 @@
   function buildNCO() {
     const [zx, zz] = zoneById('nco').pos;
     const g = W.zones.nco = G(null, zx, 0, zz);
-    // 新鋪柏油區
-    const patch = new T.Mesh(new T.PlaneGeometry(16, 7), toon('#6f748a'));
+    // 路平施工區：刨鋪中路面（新鋪黑亮、舊路面淺灰）
+    const patch = new T.Mesh(new T.PlaneGeometry(16, 7), toon('#7a7f94'));
     patch.rotation.x = -Math.PI / 2; patch.position.set(0, 0.14, -4); patch.receiveShadow = true; g.add(patch);
-    const done = new T.Mesh(new T.PlaneGeometry(16, 7), toon('#585d72'));
-    done.rotation.x = -Math.PI / 2; done.position.set(0, 0.15, -4); done.scale.x = .01; g.add(done);
-    // 壓路機
-    const roller = G(g, 0, 0, -4);
-    M(box(3.4, 1.6, 2.4), '#ffd166', { y: 1.5, parent: roller });
-    M(box(1.6, 1.4, 2.0), '#fff1c2', { x: -.6, y: 3, parent: roller });
-    M(box(2.0, .2, 2.4), '#ffd166', { x: -.6, y: 3.8, parent: roller, ol: 0.06 });
-    const drum = M(cyl(1, 1, 2.6, 20), '#c9cfdc', { x: 2.2, y: 1, rx: Math.PI / 2, parent: roller });
-    const wheel = M(cyl(.8, .8, 2.6, 16), '#4b5068', { x: -1.4, y: .8, rx: Math.PI / 2, parent: roller });
-    const lamp = M(sph(.22, 1), '#ff9e5e', { x: -.6, y: 4.1, parent: roller, ol: 0, mat: new T.MeshBasicMaterial({ color: '#ffa86b' }) });
-    W.updaters.push(t => {
-      const p = Math.sin(t * .35); roller.position.x = p * 5.5;
-      roller.rotation.y = Math.cos(t * .35) > 0 ? 0 : Math.PI;
-      drum.rotation.y += .0; drum.rotation.x = Math.PI / 2; drum.rotation.y = -p * 6;
-      done.scale.x = Math.max(.01, (p + 1) / 2); done.position.x = -8 + 8 * done.scale.x;
-      lamp.visible = (t * 3 | 0) % 2 === 0;
+    const done = new T.Mesh(new T.PlaneGeometry(16, 7), toon('#3f4356'));
+    done.rotation.x = -Math.PI / 2; done.position.set(0, 0.15, -4); done.scale.x = .01; done.receiveShadow = true; g.add(done);
+    const roller = W.roller = makeRoller(); roller.position.set(0, .15, -4); g.add(roller);
+    let lastX = 0;
+    W.updaters.push((t, dt) => {
+      const p = Math.sin(t * .3); roller.position.x = p * 5.2;
+      const v = (roller.position.x - lastX) / Math.max(dt, 1e-4); lastX = roller.position.x;
+      roller.userData.drive(t, dt, v);
+      const cover = (p + 1) / 2; done.scale.x = Math.max(.01, cover); done.position.x = -8 + 8 * cover;
     });
-    // 三角錐與圍欄
+    // 交通錐、紐澤西護欄、施工看板、拒馬燈
     for (let i = 0; i < 6; i++) cone(g, -8 + i * 3.2, 0.2);
     for (let i = 0; i < 6; i++) cone(g, -8 + i * 3.2, -8.2);
-    // 工程看板
-    const sign = G(g, 9.5, 0, -1);
-    M(box(.2, 3, .2), '#5e6a8a', { y: 1.5, parent: sign, ol: .04 });
-    M(box(3, 2, .2), '#ffffff', { y: 3.4, parent: sign, ol: .06 });
-    M(box(2.6, .4, .22), '#e0707e', { y: 4, parent: sign, ol: 0 });
-
-    // 斜張橋（跨河支線上）
-    const tBridge = 0.47, p = W.spur.getPointAt(tBridge), tan = W.spur.getTangentAt(tBridge);
-    const bg = G(null, p.x, 0, p.z); bg.rotation.y = Math.atan2(tan.x, tan.z);
-    const deckY = W.spurY(tBridge);
-    M(box(7.6, .7, 26), '#f2eee6', { y: deckY - .4, parent: bg });
-    [-3.9, 3.9].forEach(x => M(box(.3, .8, 26), '#ffb3bd', { x, y: deckY + .3, parent: bg, ol: .05 }));
-    // 橋墩
-    [-8, 8].forEach(z => M(cyl(.9, 1.1, deckY + .5, 12), '#e9e4da', { y: (deckY - .5) / 2, z, parent: bg, ol: .06 }));
-    // A 字型主塔
-    const towerH = 20;
-    [-1, 1].forEach(sx => M(box(.9, towerH, .9), '#ffffff', { x: sx * 2.6, y: towerH / 2, rz: sx * .12, parent: bg }));
-    M(box(4.6, .8, .9), '#ffb3bd', { y: towerH * .62, parent: bg, ol: .06 });
-    M(box(2.2, 1.2, 1.2), '#ffb3bd', { y: towerH + .2, parent: bg, ol: .06 });
-    // 鋼纜
-    const cablePts = [];
-    for (let k = 1; k <= 7; k++) for (const sz of [-1, 1]) for (const sx of [-1, 1]) {
-      cablePts.push(new V3(sx * 1.6, towerH - .5 - k * .35, 0), new V3(sx * 3.4, deckY + .5, sz * k * 1.75));
-    }
-    const cg = new T.BufferGeometry().setFromPoints(cablePts);
-    bg.add(new T.LineSegments(cg, new T.LineBasicMaterial({ color: '#d98a98' })));
+    [-9.4, 9.4].forEach(x => { const b = G(g, x, 0, -4); b.rotation.y = Math.PI / 2;
+      M(box(3, .9, .5), '#ffffff', { y: .45, parent: b, ol: .03 }); M(box(3.02, .25, .52), '#e0707e', { y: .65, parent: b, ol: 0 });
+      const fl = M(sph(.14, 1), '#ffb84d', { y: 1.05, parent: b, ol: 0, mat: new T.MeshBasicMaterial({ color: '#ffb84d' }) }); W.updaters.push(t => (fl.visible = ((t * 2.5) | 0) % 2 === 0)); });
+    const sign = G(g, 9.5, 0, 0.8);
+    M(box(.15, 3, .15), '#5e6a8a', { x: -1.2, y: 1.5, parent: sign, ol: .03 }); M(box(.15, 3, .15), '#5e6a8a', { x: 1.2, y: 1.5, parent: sign, ol: .03 });
+    const st = textTex(512, 320, (x, w, h) => { x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h); x.fillStyle = '#e0707e'; x.fillRect(0, 0, w, 80);
+      x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `900 46px ${FONT_TC}`; x.fillText('路平專案施工中', w / 2, 42);
+      x.fillStyle = '#2c3554'; x.font = `700 30px ${FONT_TC}`; ['工程：道路刨鋪改善', '主辦：臺北市政府工務局', '　　　新建工程處', '造成不便 敬請見諒'].forEach((s, i) => x.fillText(s, w / 2, 120 + i * 50)); });
+    const sp = new T.Mesh(new T.PlaneGeometry(2.9, 1.8), new T.MeshBasicMaterial({ map: st })); sp.position.set(0, 3.4, .09); sign.add(sp);
+    M(box(3, 1.9, .15), '#ffffff', { y: 3.4, parent: sign, ol: .04 });
+    buildZhongzheng();
   }
   function cone(parent, x, z) {
     const c = G(parent, x, 0, z);
     M(cyl(.05, .38, .9, 12), '#ff9e6b', { y: .45, parent: c, ol: .04 });
     M(cyl(.22, .29, .2, 12), '#ffffff', { y: .5, parent: c, ol: 0 });
+    M(box(.8, .08, .8), '#3d4258', { y: .04, parent: c, ol: 0 });
+  }
+
+  /* ---------- 雙鋼輪震動壓路機（仿實物：前後鋼輪、鉸接車架、ROPS 頂棚、旋轉警示燈、灑水箱、排氣、新建工程處字樣）---------- */
+  function makeRoller() {
+    const r = G(null), Y = '#ffcf3f', Yd = '#e8b42a', K = '#2f3344', S = '#b9c0cf';
+    const drums = [];
+    [-1.75, 1.75].forEach(x => {
+      const d = G(r, x, .78, 0);
+      M(cyl(.76, .76, 2.15, 28), S, { rx: Math.PI / 2, parent: d, ol: .04 });
+      [-1.09, 1.09].forEach(z => M(cyl(.6, .6, .04, 20), '#8d93a8', { z, rx: Math.PI / 2, parent: d, ol: 0 }));
+      for (let i = 0; i < 6; i++) M(box(.05, .05, 2.17), '#a3aabb', { y: Math.cos(i) * .74, x: Math.sin(i) * .74, parent: d, ol: 0, cast: false });
+      drums.push(d);
+      // 鋼輪叉架（黃）＋刮泥板
+      [-1.22, 1.22].forEach(z => M(box(1.7, 1.25, .16), Y, { x, y: 1.05, z, parent: r, ol: .03 }));
+      M(box(.12, .14, 2.3), K, { x: x + Math.sign(x) * .84, y: .55, parent: r, ol: 0 });
+      M(box(.5, .35, 2.4), Y, { x, y: 1.7, parent: r, ol: .03 });
+    });
+    // 中段機體（引擎蓋＋灑水箱）
+    M(box(2.0, 1.15, 1.9), Y, { y: 1.9, parent: r });
+    const hood = new T.Mesh(new T.CylinderGeometry(.95, .95, 2.0, 20, 1, false, 0, Math.PI), toon(Y)); hood.rotation.z = Math.PI / 2; hood.rotation.y = Math.PI / 2;
+    hood.scale.set(1, 1, .35); hood.position.set(0, 2.47, 0); hood.castShadow = true; r.add(hood); outline(hood, .03);
+    for (let i = 0; i < 6; i++) M(box(.06, .5, 1.5), K, { x: -.95 + i * .06 + .65, y: 1.95, z: 0, parent: r, ol: 0, cast: false });
+    // 鉸接接頭
+    M(cyl(.22, .22, .7, 12), K, { x: -1.0, y: 1.2, parent: r, ol: .02 });
+    // 側面字樣「新建工程處」
+    const deco = textTex(512, 128, (x, w, h) => { x.fillStyle = '#ffcf3f'; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#2f3344'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = `900 64px ${FONT_TC}`; x.fillText('新建工程處', w / 2, 52);
+      x.font = `700 24px ${FONT_TC}`; x.fillText('臺北市政府工務局', w / 2, 104);
+      for (let i = 0; i < 6; i++) { x.fillStyle = i % 2 ? '#2f3344' : '#ffcf3f'; } });
+    [-1, 1].forEach(s => { const p = new T.Mesh(new T.PlaneGeometry(1.85, .46), new T.MeshBasicMaterial({ map: deco })); p.position.set(0, 1.95, s * .955); if (s < 0) p.rotation.y = Math.PI; r.add(p); });
+    // 後方黃黑斜紋警示條
+    const chev = textTex(256, 64, (x) => { x.fillStyle = '#ffcf3f'; x.fillRect(0, 0, 256, 64); x.fillStyle = '#2f3344'; for (let i = -64; i < 320; i += 40) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 20, 0); x.lineTo(i - 44, 64); x.lineTo(i - 64, 64); x.fill(); } });
+    [-1, 1].forEach(s => { const c = new T.Mesh(new T.PlaneGeometry(2.3, .3), new T.MeshBasicMaterial({ map: chev })); c.position.set(s * 2.43, 1.75, 0); c.rotation.y = s * Math.PI / 2; r.add(c); });
+    // 駕駛平台、座椅、方向盤、儀表
+    M(box(1.6, .12, 1.9), K, { x: .2, y: 2.62, parent: r, ol: .02 });
+    M(box(.6, .14, .6), '#3d4258', { x: -.2, y: 2.95, parent: r, ol: .02 }); M(box(.12, .7, .6), '#3d4258', { x: -.5, y: 3.25, parent: r, ol: .02 });
+    M(cyl(.05, .05, .7, 6), K, { x: .55, y: 3.0, rz: .5, parent: r, ol: 0 });
+    M(new T.TorusGeometry(.24, .04, 6, 18), K, { x: .4, y: 3.32, rz: Math.PI / 2 + .5, ry: Math.PI / 2, parent: r, ol: 0 });
+    M(box(.3, .4, .7), '#3d4258', { x: .75, y: 2.9, parent: r, ol: .02 });
+    // 駕駛員（反光背心、黃帽）
+    const drv = makeNPC('road'); drv.scale.setScalar(.62); drv.position.set(-.2, 2.6, 0); drv.rotation.y = Math.PI / 2; r.add(drv);
+    drv.userData.legs.forEach(l => (l.rotation.x = -1.4)); drv.position.y = 2.42;
+    // ROPS 頂棚
+    [[-.75, -.85], [-.75, .85], [.85, -.85], [.85, .85]].forEach(([x, z]) => M(box(.1, 1.9, .1), K, { x, y: 3.55, z, parent: r, ol: .02 }));
+    M(box(1.9, .14, 2.0), Y, { y: 4.55, parent: r, ol: .03 });
+    const beacon = G(r, 0, 4.75, 0); M(cyl(.16, .2, .25, 12), '#ff9e3d', { parent: beacon, ol: .02, mat: new T.MeshBasicMaterial({ color: '#ffb366' }) });
+    const beam = new T.Mesh(new T.PlaneGeometry(1.4, .3), new T.MeshBasicMaterial({ color: '#ffb366', transparent: true, opacity: .35, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending }));
+    beam.position.x = .7; beacon.add(beam);
+    // 車燈、後照鏡、排氣管
+    [-2.45, 2.45].forEach(x => [-.6, .6].forEach(z => M(box(.06, .16, .26), '#fff6c9', { x, y: 2.2, z, parent: r, ol: 0, mat: new T.MeshBasicMaterial({ color: '#fff6c9' }) })));
+    [-1, 1].forEach(s => { M(cyl(.02, .02, .5, 4), K, { x: .9, y: 3.7, z: s * 1.05, rz: .3, parent: r, ol: 0 }); M(box(.05, .22, .16), K, { x: 1.05, y: 3.95, z: s * 1.1, parent: r, ol: 0 }); });
+    M(cyl(.07, .07, .9, 8), '#3d4258', { x: -.8, y: 2.95, z: -.75, parent: r, ol: .02 });
+    // 排氣煙
+    const puffs = [];
+    for (let i = 0; i < 6; i++) { const p = new T.Sprite(new T.SpriteMaterial({ map: dotTex(), color: '#dfe3ea', transparent: true, opacity: 0, depthWrite: false })); r.add(p); puffs.push({ p, t: i / 6 }); }
+    r.userData.drive = (t, dt, v) => {
+      drums.forEach(d => (d.rotation.z -= v * dt / .76));
+      r.position.y = .15 + Math.sin(t * 60) * .012;                         // 振動
+      beacon.rotation.y += dt * 6;
+      puffs.forEach(o => { o.t = (o.t + dt * .6) % 1; o.p.position.set(-.8 - o.t * .6, 3.4 + o.t * 1.6, -.75); o.p.scale.setScalar(.3 + o.t * .9); o.p.material.opacity = .45 * (1 - o.t); });
+    };
+    r.userData.drivers = drv;
+    return r;
+  }
+
+  /* ---------- 新中正橋（仿實體：跨距最大之三點式鋼拱橋，雙拱肋內傾、吊索、雙向車道＋人行自行車道）---------- */
+  function tubeWithOutline(parent, curve, r, col, segs = 64) {
+    const m = new T.Mesh(new T.TubeGeometry(curve, segs, r, 10, false), toon(col)); m.castShadow = true; parent.add(m);
+    const o = new T.Mesh(new T.TubeGeometry(curve, segs, r + .08, 10, false), outlineMat); parent.add(o); outlineList.push(o);
+    return m;
+  }
+  function buildZhongzheng() {
+    const tB = W.bridgeT = 0.47, p = W.spur.getPointAt(tB), tan = W.spur.getTangentAt(tB);
+    const bg = G(null, p.x, 0, p.z); bg.rotation.y = Math.atan2(tan.x, tan.z);
+    const deckY = W.spurY(tB), L = 30, Hh = 11, half = L / 2 - 1;
+    // 橋面版、邊梁、人行自行車道（綠色鋪面）
+    M(box(10.2, .8, L), '#eceae4', { y: deckY - .45, parent: bg });
+    [-5.15, 5.15].forEach(x => M(box(.5, 1.3, L), '#dfe6ee', { x, y: deckY - .3, parent: bg, ol: .04 }));
+    [-4.25, 4.25].forEach(x => { const lane = new T.Mesh(new T.PlaneGeometry(1.5, L), toon('#8fcf9a')); lane.rotation.x = -Math.PI / 2; lane.position.set(x, deckY + .02, 0); bg.add(lane); });
+    // 欄杆（立柱＋扶手）
+    [-5.1, 5.1].forEach(x => { for (let z = -L / 2; z <= L / 2; z += 1.2) M(cyl(.04, .04, .9, 5), '#9aa3b5', { x, y: deckY + .45, z, parent: bg, ol: 0, cast: false });
+      M(box(.08, .08, L), '#cfd6e2', { x, y: deckY + .92, parent: bg, ol: .01 }); });
+    // 雙拱肋（內傾）＋橫撐＋吊索
+    const rib = s => new T.CatmullRomCurve3(Array.from({ length: 25 }, (_, i) => { const u = i / 24, z = -half + u * 2 * half, y = deckY + .3 + Hh * (1 - Math.pow(z / half, 2)); return new V3(s * (4.3 - .22 * (y - deckY)), y, z); }));
+    const ribs = [rib(-1), rib(1)];
+    ribs.forEach(c => tubeWithOutline(bg, c, .42, '#f6f7fb'));
+    for (let k = 0; k < 5; k++) { const u = .3 + k * .1, a = ribs[0].getPointAt(u), b = ribs[1].getPointAt(u); tube(bg, a, b, .2, '#e6ebf3', .03); }
+    for (let i = 1; i < 14; i++) { const u = i / 14; [0, 1].forEach(s => { const a = ribs[s].getPointAt(u); tube(bg, a, new V3(s ? 4.05 : -4.05, deckY + .1, a.z), .045, '#7f8aa3', 0); }); }
+    // 拱腳（橋台）與橋墩
+    [-1, 1].forEach(sz => { M(box(10.6, deckY + .8, 2.8), '#d9d4c8', { y: (deckY - .4) / 2, z: sz * (L / 2 - 1), parent: bg, ol: .05 });
+      [-1, 1].forEach(sx => M(box(1.4, 1.2, 1.4), '#cfc9bc', { x: sx * 4.3, y: deckY + .5, z: sz * (half + .1), parent: bg, ol: .03 })); });
+    // 橋頭名柱「中正橋」
+    const nt = textTex(128, 384, (x, w, h) => { x.fillStyle = '#efe9dc'; x.fillRect(0, 0, w, h); x.fillStyle = '#5b4632'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `900 84px "Noto Serif TC",${FONT_TC}`; ['中', '正', '橋'].forEach((c, i) => x.fillText(c, w / 2, 70 + i * 120)); });
+    [-1, 1].forEach(sz => { const pl = G(bg, 6.2, deckY, sz * (L / 2 + .6)); M(box(1, 3, 1), '#efe9dc', { y: 1.5, parent: pl, ol: .04 });
+      [0, Math.PI].forEach(r => { const f = new T.Mesh(new T.PlaneGeometry(.8, 2.4), new T.MeshBasicMaterial({ map: nt })); f.position.set(0, 1.5, .51 * Math.cos(r)); f.rotation.y = r; pl.add(f); }); });
+    // 橋燈
+    for (let z = -12; z <= 12; z += 6) [-1, 1].forEach(s => { const l = G(bg, s * 5.0, deckY, z);
+      M(cyl(.06, .08, 3.2, 6), '#cfd6e2', { y: 1.6, parent: l, ol: .02 }); M(box(.7, .1, .2), '#cfd6e2', { x: -s * .3, y: 3.2, parent: l, ol: .02 });
+      M(box(.3, .08, .18), '#fff6c9', { x: -s * .55, y: 3.13, parent: l, ol: 0, mat: new T.MeshBasicMaterial({ color: '#fff6c9' }) }); });
+    // 舊川端橋（保留之歷史鋼桁架，緊鄰新橋下游側，人行自行車用）
+    const old = G(bg, 9.5, 0, 0);
+    M(box(3.4, .5, L - 2), '#c9b9a0', { y: deckY - .7, parent: old });
+    [-1.6, 1.6].forEach(x => { M(box(.15, .15, L - 2), '#7a8a9c', { x, y: deckY + .8, parent: old, ol: 0 });
+      for (let z = -13; z <= 13; z += 2) tube(old, new V3(x, deckY - .45, z), new V3(x, deckY + .8, z + 1), .05, '#7a8a9c', 0); });
+    [-6, 0, 6].forEach(z => M(cyl(.5, .6, deckY, 10), '#cfc9bc', { y: deckY / 2 - .7, z, parent: old, ol: .03 }));
+    W.bridgeCenter = new V3(p.x, deckY, p.z);
   }
 
   /* =====================================================================
@@ -1003,7 +1090,7 @@
   function buildPKL() {
     const [zx, zz] = zoneById('pkl').pos;
     const g = W.zones.pkl = G(null, zx, 0, zz);
-    g.rotation.y = Math.atan2(-zx, -zz);                     // 區內 +z 朝向局本部（公園入口）
+    g.rotation.y = Math.atan2(-zx, -zz);                     // 區內 +z 朝向工務局（公園入口）
     const W2 = (x, z) => g.localToWorld(new V3(x, 0, z));
     g.updateMatrixWorld(true);
     // 草坪＋外圈林蔭步道
@@ -1344,32 +1431,88 @@
       const led = M(sph(.16, 1), '#7cf0b0', { y: 2.4, z: .2, parent: s, ol: 0, mat: new T.MeshBasicMaterial({ color: '#7cf0b0' }) });
       W.updaters.push(t => { led.visible = ((t * 1.5 + i * .3) % 1) < .5; }); });
 
-    // ── 山神爺爺：騰雲繞山飛行，玩家到觀景台或山頂時飛來祝福 ──
-    const god = W.god = makeMountainGod(); W.scene.add(god);
+    // ── 山神爺爺：盤腿坐在大冠鷲背上盤旋；第一人稱靠近時降到玩家面前（約一人高）面對面，離開後飛回山上 ──
+    const rider = W.godRider = G(null);
+    const eagle = makeEagle(); rider.add(eagle);
+    const god = W.god = makeMountainGod(); god.scale.setScalar(.72); god.position.set(0, 1.05, -.2); rider.add(god);
+    god.userData.cloud.visible = false; god.userData.tail.visible = false;
     const spark = buildBlessing();
-    let gp = new V3(20, 40, -96), ang = 0;
+    let gp = new V3(20, 42, -96), ang = 0, scaleNow = 1.8, wasNear = false;
     W.updaters.push((t, dt) => {
-      const talking = W.mode === 'explore' && W._npc === 'god';
-      const pl = cam.pos, nearSpot = W.mode === 'explore' && (Math.hypot(pl.x - W.platform.x, pl.z - W.platform.z) < 16 || Math.hypot(pl.x - W.summit.x, pl.z - W.summit.z) < 14);
+      const pl = cam.pos, ex = W.mode === 'explore';
+      const onMountain = Math.hypot(pl.x - MT.x, pl.z - MT.z) < 44 && hill(pl.x, pl.z) > 5;
+      const near = ex && (onMountain || Math.hypot(pl.x - gp.x, pl.z - gp.z) < 26 || (wasNear && Math.hypot(pl.x - gp.x, pl.z - gp.z) < 34));
+      wasNear = near;
       let target;
-      if (nearSpot || talking) { const dir = new V3(pl.x - MT.x, 0, pl.z - MT.z).normalize(); target = new V3(pl.x + dir.x * 7, hill(pl.x, pl.z) + 6.5, pl.z + dir.z * 7); }
-      else { ang += dt * .1; target = new V3(MT.x + Math.cos(ang) * 27, 41 + Math.sin(t * .5) * 3, MT.z + Math.sin(ang) * 22 + 6); }
-      const prev = gp.clone(); gp.lerp(target, Math.min(1, dt * (nearSpot ? 1.2 : .8)));
-      god.position.set(gp.x, gp.y + Math.sin(t * 1.3) * .45, gp.z);
-      const vel = gp.clone().sub(prev);
-      const face = (nearSpot || talking) ? Math.atan2(pl.x - gp.x, pl.z - gp.z) : Math.atan2(vel.x, vel.z);
-      god.rotation.y += (nearestAngle(god.rotation.y, face) - god.rotation.y) * Math.min(1, dt * 2.5);
-      god.rotation.z = (nearSpot ? 0 : -.12) + Math.sin(t * .9) * .04;
+      if (near) {
+        const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
+        const tx = pl.x + fx * 5.5, tz = pl.z + fz * 5.5;
+        target = new V3(tx, Math.max(pl.y - 2.75, hill(tx, tz) + .6), tz);
+      } else { ang += dt * .09; target = new V3(MT.x + Math.cos(ang) * 28, 42 + Math.sin(t * .5) * 3, MT.z + Math.sin(ang) * 24 + 6); }
+      const prev = gp.clone(); gp.lerp(target, Math.min(1, dt * (near ? 1.6 : .7)));
+      scaleNow += ((near ? .85 : 1.8) - scaleNow) * Math.min(1, dt * 1.5); rider.scale.setScalar(scaleNow);
+      rider.position.set(gp.x, gp.y + Math.sin(t * 1.3) * (near ? .12 : .5), gp.z);
+      const vel = gp.clone().sub(prev), speed = vel.length() / Math.max(dt, 1e-4);
+      const face = near && speed < 6 ? Math.atan2(pl.x - gp.x, pl.z - gp.z) : Math.atan2(vel.x, vel.z);
+      const dyaw = nearestAngle(rider.rotation.y, face) - rider.rotation.y;
+      rider.rotation.y += dyaw * Math.min(1, dt * 2.2);
+      rider.rotation.z += ((near ? 0 : -.28) - dyaw * .4 - rider.rotation.z) * Math.min(1, dt * 2);    // 盤旋時側傾
+      eagle.userData.fly(t, dt, near ? 'hover' : 'glide');
       const u = god.userData;
-      u.cloud.rotation.y = t * .4; u.curls.forEach((c, i) => (c.rotation.z = t * (.6 + i * .2)));
       u.beard.rotation.x = Math.sin(t * 1.7) * .06; u.sleeveL.rotation.z = .25 + Math.sin(t * 1.4) * .06;
-      const bless = talking || nearSpot;
-      u.handR.rotation.z = bless ? -2.0 + Math.sin(t * 3) * .25 : -.7 + Math.sin(t * 1.2) * .08;
-      u.head.rotation.x = Math.sin(t * .8) * .06 + (bless ? Math.max(0, Math.sin(t * 2)) * .12 : 0);
+      const talking = ex && W._npc === 'god';
+      u.handR.rotation.z = (talking || near) ? -2.0 + Math.sin(t * 3) * .25 : -.7 + Math.sin(t * 1.2) * .08;
+      u.head.rotation.x = Math.sin(t * .8) * .06 + (talking ? Math.max(0, Math.sin(t * 2)) * .12 : 0);
       u.halo.rotation.z = t * .5; u.haloGlow.material.opacity = .35 + Math.sin(t * 2) * .1;
-      spark(god.position, dt, bless);
-      const n = W.npcs.find(x => x.id === 'god'); if (n) n.pos.copy(god.position).setY(god.position.y - 4);
+      spark(rider.position.clone().setY(rider.position.y + 2 * scaleNow), dt, near);
+      const n = W.npcs.find(x => x.id === 'god'); if (n) { n.pos.copy(rider.position); n.radius = near ? 12 : 0; }
     });
+  }
+
+  // 大冠鷲（台灣特有亞種：深褐身體、白色斑點腹部、黃色臉部裸皮與腳、頭後短冠羽、翼與尾的寬白帶）
+  function makeEagle() {
+    const e = G(null), brown = '#5b3f2c', brownD = '#3e2a1d', yellow = '#ffc93c';
+    const spotT = textTex(256, 128, x => { x.fillStyle = '#7a5538'; x.fillRect(0, 0, 256, 128);
+      for (let i = 0; i < 90; i++) { x.fillStyle = 'rgba(255,248,230,.9)'; x.beginPath(); x.arc(Math.random() * 256, Math.random() * 128, 2 + Math.random() * 3, 0, 7); x.fill(); } });
+    const wingT = textTex(512, 256, x => { const g = x.createLinearGradient(0, 0, 512, 0); g.addColorStop(0, '#5b3f2c'); g.addColorStop(1, '#4a3222'); x.fillStyle = g; x.fillRect(0, 0, 512, 256);
+      x.fillStyle = '#f4efe2'; x.fillRect(0, 170, 512, 34);                      // 翼後緣寬白帶
+      x.fillStyle = '#231710'; x.fillRect(0, 210, 512, 46);
+      for (let i = 0; i < 30; i++) { x.fillStyle = 'rgba(255,255,255,.18)'; x.fillRect(i * 17, 40, 3, 120); } });
+    // 身體
+    M(sph(.8, 3), null, { y: .2, s: [.85, .75, 1.7], parent: e, mat: new T.MeshToonMaterial({ map: spotT, gradientMap: gradMap }) });
+    M(sph(.8, 3), brown, { y: .45, z: -.1, s: [.88, .55, 1.6], parent: e, ol: .03 });
+    // 頭、冠羽、黃色臉部、眼、鉤喙
+    const head = G(e, 0, .75, 1.35); e.userData.head = head;
+    M(sph(.45, 3), brownD, { s: [.9, .9, 1.05], parent: head });
+    for (let i = 0; i < 5; i++) M(new T.ConeGeometry(.12, .5, 6), i % 2 ? '#f4efe2' : '#231710', { x: (i - 2) * .08, y: .25, z: -.35, rx: -1.9 + i * .05, parent: head, ol: .01 });
+    [-1, 1].forEach(s => { M(sph(.17, 2), yellow, { x: s * .27, y: .05, z: .22, s: [.6, 1, 1.2], parent: head, ol: 0 });
+      M(sph(.08, 2), '#ffe36b', { x: s * .33, y: .08, z: .27, parent: head, ol: 0 }); M(sph(.045, 1), '#111', { x: s * .37, y: .08, z: .3, parent: head, ol: 0 }); });
+    M(sph(.16, 2), yellow, { y: -.02, z: .42, s: [1, .8, 1], parent: head, ol: .01 });
+    M(new T.ConeGeometry(.12, .4, 8), '#5c6b80', { y: -.08, z: .62, rx: Math.PI / 2 + .5, parent: head, ol: .01 });
+    // 翅膀（內翼＋外翼，翼尖分叉飛羽）
+    const wings = [-1, 1].map(s => {
+      const root = G(e, s * .55, .55, .1), inner = G(root, 0, 0, 0), outer = G(inner, s * 2.0, 0, 0);
+      const wm = new T.MeshToonMaterial({ map: wingT, gradientMap: gradMap, side: T.DoubleSide });
+      const iw = new T.Mesh(new T.BoxGeometry(2.1, .1, 1.4), wm); iw.position.x = s * 1.0; iw.castShadow = true; inner.add(iw); outline(iw, .03);
+      const ow = new T.Mesh(new T.BoxGeometry(1.8, .08, 1.15), wm); ow.position.set(s * .85, 0, .05); ow.castShadow = true; outer.add(ow); outline(ow, .03);
+      for (let k = 0; k < 5; k++) M(box(.7, .05, .2), '#231710', { x: s * (1.85 + k * .05), z: .45 - k * .23, ry: s * (-.15 + k * .1), parent: outer, ol: .01 });
+      return { root, inner, outer, s };
+    });
+    // 尾羽（黑白寬帶）
+    const tailT = textTex(128, 128, x => { x.fillStyle = '#231710'; x.fillRect(0, 0, 128, 128); x.fillStyle = '#f4efe2'; x.fillRect(0, 50, 128, 30); });
+    const tail = new T.Mesh(new T.ConeGeometry(.7, 1.6, 3, 1, true), new T.MeshToonMaterial({ map: tailT, gradientMap: gradMap, side: T.DoubleSide }));
+    tail.rotation.x = Math.PI / 2; tail.scale.set(1, 1, .18); tail.position.set(0, .35, -1.75); e.add(tail); outline(tail, .02);
+    // 腳（收起）
+    [-1, 1].forEach(s => M(cyl(.07, .08, .5, 6), yellow, { x: s * .25, y: -.4, z: -.3, rx: 1.1, parent: e, ol: .01 }));
+    let flapT = 0;
+    e.userData.fly = (t, dt, mode) => {
+      flapT += dt;
+      const flap = mode === 'hover' ? Math.sin(t * 5) * .55 : ((t % 7) < 1.6 ? Math.sin(t * 6) * .5 : .08 + Math.sin(t * .8) * .04);
+      wings.forEach(w => { w.inner.rotation.z = w.s * flap; w.outer.rotation.z = w.s * flap * .6 - w.s * (mode === 'hover' ? .1 : 0); });
+      head.rotation.y = Math.sin(t * .7) * .3;
+      e.rotation.x = mode === 'hover' ? -.15 : .05;
+    };
+    return e;
   }
 
   // 祝福光點（金色、葉綠色光粒子從山神身上飄散）
@@ -1405,6 +1548,7 @@
       const c = new T.Mesh(new T.TorusGeometry(.45, .1, 8, 24, Math.PI * 1.5), toon('#dfeefc')); c.position.set(x, y, z); c.rotation.y = r; cloud.add(c); outline(c, .03); curls.push(c); });
     g.userData.curls = curls;
     const tail = M(sph(.6, 2), '#ffffff', { x: -.2, y: -.4, z: -2.1, s: [.7, .5, 1.6], parent: g, ol: .04 });
+    g.userData.tail = tail;
     // 盤坐的下袍
     M(sph(1.15, 3), robe, { y: .65, s: [1.25, .55, 1.05], parent: g });
     M(new T.TorusGeometry(1.2, .07, 8, 40), gold, { y: .55, rx: Math.PI / 2, s: [1.18, 1, 1], parent: g, ol: 0 });
@@ -1718,7 +1862,7 @@
     else if (id === 'geo') { tgt = new V3(4, 18, -88); dist = 82; az = .25; el = .16; }
     else {
       tgt = new V3(x, 4, zz); dist = 46; el = .27;
-      az = Math.atan2(-x, -zz);               // 相機在局本部側往外看（背景是台北全景）
+      az = Math.atan2(-x, -zz);               // 相機在工務局側往外看（背景是台北全景）
     }
     cam.goal = { t0: performance.now(), dur: 1500, from: { target: cam.target.clone(), dist: cam.dist, az: cam.az, el: cam.el }, to: { target: tgt, dist, az: nearestAngle(cam.az, az), el } };
     cam.auto = false; cam.lastInteract = performance.now();
@@ -1797,7 +1941,7 @@
       cam.pos.x = next.x; cam.pos.z = next.z;
       const speed = cam.vel.length();
       cam.bob = (cam.bob || 0) + dt * speed * .9;
-      cam.pos.y = 2.4 + Math.sin(cam.bob) * .08 * Math.min(1, speed / 8) + bridgeLift(cam.pos) + hill(cam.pos.x, cam.pos.z);
+      cam.pos.y = 2.4 + (W.reduced ? 0 : Math.sin(cam.bob) * .08) * Math.min(1, speed / 8) + bridgeLift(cam.pos) + hill(cam.pos.x, cam.pos.z);
     }
     W.camera.position.copy(cam.pos);
     const look = new V3(-Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.cos(cam.yaw) * Math.cos(cam.pitch));
@@ -1810,7 +1954,8 @@
     W.npcs.forEach(n => { const d = Math.hypot(cam.pos.x - n.pos.x, cam.pos.z - n.pos.z); if (d < n.radius && d < best) { best = d; npc = n.id; } });
     if (npc !== W._npc) { W._npc = npc; const n = W.npcs.find(x => x.id === npc); if (n) n.wave = 2.2; W.listeners.npc.forEach(f => f(npc)); }
   }
-  function bridgeLift(p) { const d = Math.hypot(p.x + 42, p.z - 62); return d < 8 ? 1.6 * (1 - d / 8) : 0; }
+  function nearSpur(p) { let b = null, bd = 1e9; for (const s of W.spurSamples) { const d = Math.hypot(s.x - p.x, s.z - p.z); if (d < bd) { bd = d; b = s; } } return { d: bd, t: b.t }; }
+  function bridgeLift(p) { const n = nearSpur(p); return n.d < 4.6 ? W.spurY(n.t) - .12 : 0; }
   function resolveCollision(p) {
     const r0 = Math.hypot(p.x, p.z); if (r0 > 104) { p.x *= 104 / r0; p.z *= 104 / r0; }
     for (const c of W.colliders) {
@@ -1818,7 +1963,7 @@
       if (d < rr && d > .001) { p.x = c.x + dx / d * rr; p.z = c.z + dz / d * rr; }
     }
     // 河流：只能從橋上通過
-    const onBridge = Math.hypot(p.x + 42, p.z - 62) < 9 && Math.abs(p.x + 42) < 4.5;
+    const onBridge = nearSpur(p).d < 4.4;
     if (!onBridge) {
       let best = null, bd = 1e9; for (const s of W.riverSamples) { const d = Math.hypot(s.x - p.x, s.z - p.z); if (d < bd) { bd = d; best = s; } }
       const lim = RIVER_W / 2 + .6;
@@ -1842,7 +1987,7 @@
       cam.target.lerpVectors(f.target, to.target, e);
       cam.dist = f.dist + (to.dist - f.dist) * e; cam.az = f.az + (to.az - f.az) * e; cam.el = f.el + (to.el - f.el) * e;
       if (k >= 1) cam.goal = null;
-    } else if (cam.auto || performance.now() - cam.lastInteract > 12000) {
+    } else if (!W.reduced && (cam.auto || performance.now() - cam.lastInteract > 12000)) {
       cam.az += dt * .025;
     }
     const ce = Math.cos(cam.el);
@@ -1889,14 +2034,16 @@
   window.World = {
     init, flyTo, setMode, setSeason, setQuality, projectZones, overviewHome,
     setViewShift: v => { viewShiftGoal = v; },
+    setReducedMotion: v => { W.reduced = v; if (W.particleMat) W.particleMat.visible = !v; },
     projectNPC: id => { const n = W.npcs.find(x => x.id === id); if (!n) return null;
-      const h = n.obj ? 2.9 : n.data.outfit === 'god' ? 9 : 3.4; tmp.set(n.pos.x, n.pos.y + h, n.pos.z).project(W.camera);
+      const h = n.obj ? 2.9 : n.data.outfit === 'god' ? 4.4 : 3.4; tmp.set(n.pos.x, n.pos.y + h, n.pos.z).project(W.camera);
       const c = W.renderer.domElement; return { x: (tmp.x + 1) / 2 * c.clientWidth, y: (1 - tmp.y) / 2 * c.clientHeight, visible: tmp.z < 1 }; },
     teleport: (x, z, yaw) => { cam.fp = null; cam.pos.set(x, 2.4, z); cam.yaw = yaw; cam.vel.set(0, 0, 0); },
     npcWave: id => { const n = W.npcs.find(x => x.id === id); if (n) n.wave = 1.6; },
     listenerPos: () => (W.mode === 'explore' ? cam.pos : cam.target),
     riverDistance: (x, z) => nearRiver(x, z),
-    get godPos() { return W.god && W.god.position; }, get godYaw() { return W.god ? W.god.rotation.y : 0; },
+    get rollerPos() { return W.roller && W.roller.getWorldPosition(new V3()); },
+    get godPos() { return W.godRider && W.godRider.position; }, get godYaw() { return W.godRider ? W.godRider.rotation.y : 0; },
     get playgroundPos() { return W.playground; }, get fallPos() { return W.fallPos; },
     debugCam: (p, l) => { W.mode = 'debug'; W.follow = null; viewShiftGoal = 0; W.camera.position.copy(p); W.camera.lookAt(l); },
     debugFollowBike: () => { W.mode = 'debug'; viewShiftGoal = 0; W.follow = W.bikes[0]; },

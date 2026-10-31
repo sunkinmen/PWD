@@ -1,4 +1,4 @@
-/* emblems.js ── 局本部＋五大工程處徽章（統一線稿風格 SVG）
+/* emblems.js ── 工務局＋五大工程處徽章（統一線稿風格 SVG）
  * 統一規格：64×64、圓角方形底、深藍 2.4px 線稿、各處主題色填色 */
 (function () {
   const INK = '#2c3554';
@@ -16,7 +16,7 @@
 </svg>`;
 
   window.EMBLEMS = {
-    // 局本部：市府大樓＋臺北101
+    // 工務局：市府大樓＋臺北101
     hub: frame('hub', '#cfe0ff', '#4a7fd4', `
       <path d="M40 50V22l3-3 3 3v28" fill="#9fc1f5"/>
       <path d="M40 30h6M40 38h6M43 19v-6" />
