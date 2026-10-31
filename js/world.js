@@ -550,7 +550,8 @@
     const clockLed = M(box(2.8, .35, .05), '#ff5a4f', { y: 6.5, z: 2.13, parent: ent, ol: 0, mat: new T.MeshBasicMaterial({ color: '#ff6a5c' }) });
     W.updaters.push(t => { clockLed.scale.x = .85 + ((t | 0) % 2) * .15; });
     // 入口上方屋頂綠籬（柏樹列）
-    for (let i = -4; i <= 4; i++) M(new T.ConeGeometry(.45, 1.8, 7), '#6fae7c', { x: i * 1.0, y: 6.9, z: 4.6, parent: ent, ol: .04 });
+    M(box(8.2, .4, 1.2), '#7a5d55', { y: 6.2, z: .8, parent: ent, ol: .03 });                         // 屋頂植栽槽
+    for (let i = -4; i <= 4; i++) M(new T.ConeGeometry(.42, 1.8, 7), i % 2 ? '#5f9f6c' : '#6fae7c', { x: i * .9, y: 7.3, z: .8, parent: ent, ol: .04 });
     // 中央量體頂部的國旗旗桿
     M(cyl(.05, .07, 4.1, 8), '#e8e8f0', { y: H + 2, z: 3.2, parent: hall, ol: .03 });
     // 中華民國國旗（依比例繪製：紅底、左上青天、十二道光芒白日）
@@ -1306,7 +1307,7 @@
     const arm = G(t, .95, 1.45, .1); t.userData.arm = arm;
     M(new T.CapsuleGeometry(.2, .7, 4, 10), skin, { y: .45, parent: arm, ol: .03 });
     M(sph(.24, 2), '#ffffff', { y: .95, parent: arm, ol: .03 });
-    const armL = G(t, -.95, 1.45, .1); armL.rotation.set(.9, 0, .5);
+    const armL = G(t, -.98, 1.5, .15); armL.rotation.set(.55, 0, -.85);
     M(new T.CapsuleGeometry(.2, .7, 4, 10), skin, { y: -.45, parent: armL, ol: .03 });
     M(sph(.24, 2), '#ffffff', { y: -.95, parent: armL, ol: .03 });
     M(cyl(.12, .12, .7, 12), '#3d4258', { y: -1.05, z: .25, rx: Math.PI / 2, parent: armL, ol: .02 });
@@ -1437,18 +1438,22 @@
     const god = W.god = makeMountainGod(); god.scale.setScalar(.72); god.position.set(0, 1.05, -.2); rider.add(god);
     god.userData.cloud.visible = false; god.userData.tail.visible = false;
     const spark = buildBlessing();
-    let gp = new V3(20, 42, -96), ang = 0, scaleNow = 1.8, wasNear = false;
+    let gp = new V3(20, 42, -96), ang = 0, scaleNow = 1.8, anchor = null, cooldown = 0, inside = false;
     W.updaters.push((t, dt) => {
       const pl = cam.pos, ex = W.mode === 'explore';
-      const onMountain = Math.hypot(pl.x - MT.x, pl.z - MT.z) < 44 && hill(pl.x, pl.z) > 5;
-      const near = ex && (onMountain || Math.hypot(pl.x - gp.x, pl.z - gp.z) < 26 || (wasNear && Math.hypot(pl.x - gp.x, pl.z - gp.z) < 34));
-      wasNear = near;
+      const onMountain = ex && Math.hypot(pl.x - MT.x, pl.z - MT.z) < 44 && hill(pl.x, pl.z) > 5;
+      cooldown = Math.max(0, cooldown - dt);
+      // 進入山區時降落一次，停在「當下」玩家前方的固定點；玩家走開超過 14 公尺就飛回山上，不會一路跟隨
+      if (onMountain && !inside && !anchor && cooldown === 0) {
+        const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), tx = pl.x + fx * 5.5, tz = pl.z + fz * 5.5;
+        anchor = new V3(tx, Math.max(pl.y - 2.75, hill(tx, tz) + .6), tz);
+      }
+      inside = onMountain;
+      if (anchor && (!ex || Math.hypot(pl.x - anchor.x, pl.z - anchor.z) > 14)) { anchor = null; cooldown = 25; }
+      const near = !!anchor;
       let target;
-      if (near) {
-        const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
-        const tx = pl.x + fx * 5.5, tz = pl.z + fz * 5.5;
-        target = new V3(tx, Math.max(pl.y - 2.75, hill(tx, tz) + .6), tz);
-      } else { ang += dt * .09; target = new V3(MT.x + Math.cos(ang) * 28, 42 + Math.sin(t * .5) * 3, MT.z + Math.sin(ang) * 24 + 6); }
+      if (near) target = anchor;
+      else { ang += dt * .09; target = new V3(MT.x + Math.cos(ang) * 28, 42 + Math.sin(t * .5) * 3, MT.z + Math.sin(ang) * 24 + 6); }
       const prev = gp.clone(); gp.lerp(target, Math.min(1, dt * (near ? 1.6 : .7)));
       scaleNow += ((near ? .85 : 1.8) - scaleNow) * Math.min(1, dt * 1.5); rider.scale.setScalar(scaleNow);
       rider.position.set(gp.x, gp.y + Math.sin(t * 1.3) * (near ? .12 : .5), gp.z);
