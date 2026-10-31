@@ -440,9 +440,27 @@
     // 入口上方屋頂綠籬（柏樹列）
     for (let i = -4; i <= 4; i++) M(new T.ConeGeometry(.45, 1.8, 7), '#6fae7c', { x: i * 1.0, y: 6.9, z: 4.6, parent: ent, ol: .04 });
     // 中央量體頂部的國旗旗桿
-    M(cyl(.06, .08, 4, 6), '#e8e8f0', { y: H + 2, z: 3.2, parent: hall, ol: .03 });
-    const nflag = M(box(1.3, .85, .04), '#e86b6b', { x: .65, y: H + 3.5, z: 3.2, parent: hall, ol: .03 });
-    W.updaters.push(t => { nflag.rotation.y = Math.sin(t * 2.2) * .3; });
+    M(cyl(.05, .07, 4.1, 8), '#e8e8f0', { y: H + 2, z: 3.2, parent: hall, ol: .03 });
+    // 中華民國國旗（依比例繪製：紅底、左上青天、十二道光芒白日）
+    const fc = document.createElement('canvas'); fc.width = 768; fc.height = 512; const fx = fc.getContext('2d');
+    fx.fillStyle = '#de0a17'; fx.fillRect(0, 0, 768, 512);
+    fx.fillStyle = '#0d2a8a'; fx.fillRect(0, 0, 384, 256);
+    const cx = 192, cy = 128, Ro = 96, Ri = 51, Rd = 48;          // 光芒外徑、內徑、白日半徑（含藍環）
+    fx.fillStyle = '#ffffff'; fx.beginPath();
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 - Math.PI / 2, a1 = a - Math.PI / 12, a2 = a + Math.PI / 12;
+      fx.moveTo(cx + Math.cos(a1) * Ri, cy + Math.sin(a1) * Ri); fx.lineTo(cx + Math.cos(a) * Ro, cy + Math.sin(a) * Ro); fx.lineTo(cx + Math.cos(a2) * Ri, cy + Math.sin(a2) * Ri); }
+    fx.fill();
+    fx.beginPath(); fx.arc(cx, cy, Rd + 3.5, 0, Math.PI * 2); fx.fillStyle = '#0d2a8a'; fx.fill();
+    fx.beginPath(); fx.arc(cx, cy, Rd, 0, Math.PI * 2); fx.fillStyle = '#ffffff'; fx.fill();
+    const ftex = new T.CanvasTexture(fc); ftex.colorSpace = T.SRGBColorSpace; ftex.anisotropy = 8;
+    const fgeo = new T.PlaneGeometry(2.1, 1.4, 16, 6); fgeo.translate(1.05, 0, 0);
+    const fbase = fgeo.attributes.position.array.slice();
+    const nflag = new T.Mesh(fgeo, new T.MeshToonMaterial({ map: ftex, gradientMap: gradMap, side: T.DoubleSide }));
+    nflag.position.set(.06, H + 3.25, 3.2); nflag.castShadow = true; hall.add(nflag);
+    M(sph(.12, 1), '#f3d9a8', { y: H + 4.05, z: 3.2, parent: hall, ol: .02 });                 // 旗桿頂球
+    W.updaters.push(t => { const a = fgeo.attributes.position.array;
+      for (let i = 0; i < a.length; i += 3) { const x = fbase[i], k = x / 2.1; a[i + 2] = Math.sin(x * 3 - t * 4) * .14 * k + Math.sin(fbase[i + 1] * 2 + t * 3) * .03 * k; }
+      fgeo.attributes.position.needsUpdate = true; fgeo.computeVertexNormals(); });
     // 前廣場路燈（市府前 Y 形燈）
     [-1, 1].forEach(sx => [10, 15].forEach(z => {
       const l = G(hall, sx * 5, 0, z);
