@@ -31,12 +31,14 @@
       try { World.init($('#world'), { skyImage: sky, quality: safeGet('pwd3d-quality') || 'auto' }); }
       catch (e) { console.error(e); txt.textContent = '您的瀏覽器不支援 3D，已切換為純文字版'; setTimeout(openA11y, 800); clearInterval(iv); return; }
       const season = safeGet('pwd3d-season'); if (season) World.setSeason(season);
+      if (safeGet('pwd3d-voice') === 'off') Sound.setVoice(false);
       World.setViewShift(.16);
       buildTiles(); buildLabels(); bindKeys(); bindJoystick(); clock();
       World.on('zoneClick', id => { if (!started) return; World.mode === 'explore' ? openSheet(id) : select(id); });
       World.on('proximity', onProximity);
       World.on('frame', onFrame);
       World.on('modeChange', onMode);
+      World.on('npc', onNPC);
       clearInterval(iv); fill.style.width = '100%';
       setTimeout(() => $('#loader').classList.add('done'), 300);
       setTimeout(() => $('#loader').remove(), 1000);
@@ -50,6 +52,7 @@
     if (started) return; started = true; blip(660);
     $('#title').classList.add('leaving'); setTimeout(() => $('#title').remove(), 700);
     $('#hud').hidden = false;
+    try { Sound.start(); $('#btn-sound').textContent = '🔊'; } catch (e) { }
     if (mode === 'explore') { World.setMode('explore'); toast('歡迎來到臺北工務世界！走近各處入口可查看介紹'); }
     else { select('hub'); onMode('overview'); }
   }
@@ -103,6 +106,7 @@
 
   function onProximity(id) {
     near = id; const p = $('#prompt');
+    if (npcId) return;
     if (!id) { p.hidden = true; return; }
     $('#prompt-text').textContent = `查看 ${zone(id).shortName}`;
     p.hidden = false; p.onclick = () => openSheet(id);
@@ -128,6 +132,7 @@
   function openMenu() {
     $('#menu').hidden = false;
     seg('#seg-season', World.season, v => { World.setSeason(v); safeSet('pwd3d-season', v); });
+    seg('#seg-voice', Sound.voiceOn ? 'on' : 'off', v => { Sound.setVoice(v === 'on'); safeSet('pwd3d-voice', v); });
     seg('#seg-quality', safeGet('pwd3d-quality') || 'auto', v => { World.setQuality(v); safeSet('pwd3d-quality', v); toast('畫質已切換'); });
   }
   function seg(sel, val, fn) {
@@ -156,7 +161,7 @@
     $('#a11y').hidden = false;
   }
   function showHelp() {
-    toast(document.body.classList.contains('touch') ? '左下搖桿移動、右側拖曳轉視角；點上方圖示切換世界' : 'WASD 移動・Shift 奔跑・拖曳轉視角・E 查看・← → 切換世界', 4200);
+    toast(document.body.classList.contains('touch') ? '左下搖桿移動、右側拖曳轉視角；點上方圖示切換世界' : 'WASD 移動・Shift 奔跑・拖曳轉視角・走近工作人員按 E 對話・← → 切換世界', 4200);
   }
 
   /* ---------- 鍵盤（PS5 風格：左右切換、Enter 確認、Esc 返回） ---------- */
@@ -168,7 +173,8 @@
       if (World.mode === 'overview') {
         if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1);
         if (e.key === 'Enter') enterZone();
-      } else if ((e.code === 'KeyE' || e.key === 'Enter') && near) openSheet(near);
+      } else if ((e.code === 'KeyE' || e.key === 'Enter') && npcId) nextLine();
+      else if ((e.code === 'KeyE' || e.key === 'Enter') && near) openSheet(near);
       if (e.key >= '1' && e.key <= '6') select(ZONES[+e.key - 1].id);
       if (e.code === 'KeyM') toggleMode();
     });
@@ -202,6 +208,9 @@
       el.classList.toggle('on', !ex && p.id === current);
     });
     if (ex) drawMinimap();
+    if (npcId) { const q = World.projectNPC(npcId), b = $('#npc-bubble');
+      if (q && q.visible) { const w = innerWidth, x = Math.max(150, Math.min(w - 150, q.x)), y = Math.max(140, q.y); b.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`; b.style.opacity = 1; }
+      else b.style.opacity = 0; }
   }
   const mm = { ctx: null };
   function drawMinimap() {
@@ -218,32 +227,42 @@
     const pp = World.playerPos, yaw = World.playerYaw; const [px, py] = P(pp.x, pp.z);
     x.translate(px, py); x.rotate(-yaw); x.fillStyle = '#24304f'; x.beginPath(); x.moveTo(0, -9); x.lineTo(6, 6); x.lineTo(0, 3); x.lineTo(-6, 6); x.fill();
     x.restore();
+    x.fillStyle = '#24304f'; x.font = '800 15px Outfit, sans-serif'; x.textAlign = 'center'; x.fillText('N', 90, 18);
   }
 
   /* ---------- 小工具 ---------- */
   function clock() { const f = () => { const d = new Date(); $('#clock').textContent = d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }); }; f(); setInterval(f, 15000); }
   let tt; function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), ms); }
 
-  // 音效：UI 提示音＋環境音（流水＋鳥鳴），Web Audio 即時合成，不需音檔
-  let ac = null, amb = null;
-  function blip(f = 600) { if (!ac) return; const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = f;
-    g.gain.setValueAtTime(.06, ac.currentTime); g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + .12); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + .13); }
-  function toggleSound() {
-    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-    if (amb) { amb.stop(); amb = null; $('#btn-sound').textContent = '🔈'; return; }
-    const len = ac.sampleRate * 4, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0); let last = 0;
-    for (let i = 0; i < len; i++) { last = (last + .02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.2; }
-    const src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
-    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; const g = ac.createGain(); g.gain.value = .35;
-    src.connect(lp).connect(g).connect(ac.destination); src.start();
-    const birds = setInterval(() => { const o = ac.createOscillator(), bg = ac.createGain(), t = ac.currentTime, f0 = 2200 + Math.random() * 1400;
-      o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 1.4, t + .08); o.frequency.exponentialRampToValueAtTime(f0, t + .16);
-      bg.gain.setValueAtTime(.0001, t); bg.gain.exponentialRampToValueAtTime(.03, t + .03); bg.gain.exponentialRampToValueAtTime(.0001, t + .2);
-      o.connect(bg).connect(ac.destination); o.start(); o.stop(t + .22); }, 2600);
-    amb = { stop() { src.stop(); clearInterval(birds); } };
-    $('#btn-sound').textContent = '🔊';
+  // 音效：交給 audio.js（Sound）
+  const blip = f => window.Sound && Sound.blip(f);
+  function toggleSound() { if (Sound.on) { Sound.stop(); $('#btn-sound').textContent = '🔈'; } else { Sound.start(); $('#btn-sound').textContent = '🔊'; } }
+
+  /* ---------- NPC 對話 ---------- */
+  let npcId = null, npcIdx = {}, typing = null;
+  const npcData = id => (window.NPCS || []).find(n => n.id === id);
+  function onNPC(id) {
+    npcId = id; const bub = $('#npc-bubble');
+    if (!id) { bub.hidden = true; Sound.stopVoice(); if (near) onProximity(near); else $('#prompt').hidden = true; return; }
+    const n = npcData(id);
+    $('#npc-name').textContent = n.name; $('#npc-role').textContent = n.role;
+    bub.style.setProperty('--c', (zone(n.zone) || {}).color || '#4a7fd4');
+    bub.hidden = false;
+    const gi = Math.random() * n.greet.length | 0; talk(n.greet[gi], n, `${n.id}-g${gi + 1}`);
+    const p = $('#prompt'); $('#prompt-text').textContent = `和${n.name}聊聊`; p.hidden = false; p.onclick = nextLine;
+  }
+  function nextLine() {
+    const n = npcData(npcId); if (!n) return;
+    const i = npcIdx[n.id] = ((npcIdx[n.id] ?? -1) + 1) % n.lines.length;
+    talk(n.lines[i], n, `${n.id}-${i + 1}`); World.npcWave(n.id); blip(760);
+  }
+  function talk(line, n, key) {
+    const text = typeof line === 'string' ? line : line.text, el = $('#npc-text');
+    clearInterval(typing); let k = 0; el.textContent = '';
+    typing = setInterval(() => { el.textContent = text.slice(0, ++k); if (k >= text.length) clearInterval(typing); }, 38);
+    Sound.say(line, Object.assign({ key }, n.voice));
   }
 
-  window.UI = { start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound };
+  window.UI = { nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound };
   boot();
 })();
