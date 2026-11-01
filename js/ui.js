@@ -35,7 +35,7 @@
       const rm = safeGet('pwd3d-motion') || (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'on' : 'off'); setMotion(rm);
       World.setViewShift(.16);
       World.setTime(safeGet('pwd3d-time') || 'auto');
-      World.setAvatar(safeGet('pwd3d-avatar') || 'm'); World.setView(safeGet('pwd3d-view') || 'first');
+      World.setAvatar(safeGet('pwd3d-avatar') || 'm'); World.setView(safeGet('pwd3d-view') || 'first'); syncView();
       updateStampCount();
       buildTiles(); buildLabels(); bindKeys(); bindJoystick(); clock(); showFestival();
       World.on('zoneClick', id => { if (!started) return; World.mode === 'explore' ? openSheet(id) : select(id); });
@@ -172,8 +172,8 @@
     seg('#seg-motion', safeGet('pwd3d-motion') || 'off', v => { setMotion(v); safeSet('pwd3d-motion', v); });
     seg('#seg-quality', safeGet('pwd3d-quality') || 'auto', v => { World.setQuality(v); safeSet('pwd3d-quality', v); toast(t('qualityChanged')); });
     seg('#seg-time', World.timeMode || 'auto', v => { World.setTime(v); safeSet('pwd3d-time', v); });
-    seg('#seg-view', World.view, v => { World.setView(v); safeSet('pwd3d-view', v); if (v === 'third' && World.mode !== 'explore') { close('menu'); World.setMode('explore'); } });
-    seg('#seg-avatar', safeGet('pwd3d-avatar') || 'm', v => { World.setAvatar(v); safeSet('pwd3d-avatar', v); if (World.view !== 'third') { World.setView('third'); safeSet('pwd3d-view', 'third'); seg('#seg-view', 'third', () => { }); openMenu(); } });
+    seg('#seg-view', World.view, v => { setView(v); if (v === 'third' && World.mode !== 'explore') { close('menu'); World.setMode('explore'); } });
+    seg('#seg-avatar', safeGet('pwd3d-avatar') || 'm', v => { setAvatar(v); if (World.view !== 'third') { setView('third'); openMenu(); } });
   }
   function seg(sel, val, fn) {
     document.querySelectorAll(sel + ' button').forEach(b => { const on = b.dataset.v === val; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
@@ -256,6 +256,7 @@
       else if ((e.code === 'KeyE' || (e.key === 'Enter' && !onUI)) && near) openSheet(near);
       if (e.key >= '1' && e.key <= '6') select(ZONES[+e.key - 1].id);
       if (e.code === 'KeyM') toggleMode();
+      if (e.code === 'KeyV' && World.mode === 'explore') toggleView();
     });
   }
 
@@ -455,11 +456,23 @@
   }
   function roundRect(x, a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
 
+  /* ---------- 第一／第三人稱、旅人角色 ---------- */
+  function syncView() {
+    const third = World.view === 'third', g = safeGet('pwd3d-avatar') || 'm';
+    $('#view-txt').textContent = t(third ? 'thirdP' : 'firstP'); $('#view-txt').dataset.i18n = third ? 'thirdP' : 'firstP';
+    $('#btn-view').classList.toggle('on', third); $('#avatar-thumb').src = `assets/avatar/${g}.jpg`;
+    $('#btn-avatar').hidden = !third;
+  }
+  function setView(v) { World.setView(v); safeSet('pwd3d-view', v); syncView(); }
+  function setAvatar(g) { World.setAvatar(g); safeSet('pwd3d-avatar', g); syncView(); }
+  function toggleView() { const v = World.view === 'third' ? 'first' : 'third'; setView(v); blip(v === 'third' ? 700 : 560); toast(t(v === 'third' ? 'viewThirdToast' : 'viewFirstToast')); track('view', { v }); }
+  function toggleAvatar() { const g = (safeGet('pwd3d-avatar') || 'm') === 'm' ? 'f' : 'm'; setAvatar(g); blip(760); toast(t(g === 'm' ? 'avatarM' : 'avatarF')); }
+
   /* ---------- 工務局完整資訊（pwd-portal.js）---------- */
   function openPortal(tab, arg) { if (!window.Portal) return; if ($('#portal').hidden) { lastFocus = document.activeElement; $('#portal-emblem').innerHTML = EM.hub; blip(600); } Portal.open(tab || 'home', arg); }
   function closePortal() { if (!window.Portal) return; Portal.close(); if (lastFocus && document.contains(lastFocus)) lastFocus.focus(); }
 
-  window.UI = { openPortal, closePortal, portalFilter: q => Portal.filter(q), talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
+  window.UI = { toggleView, toggleAvatar, openPortal, closePortal, portalFilter: q => Portal.filter(q), talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
     share, openTasks, startTour, tourNext, endTour, toggleLang };
   boot();
 })();

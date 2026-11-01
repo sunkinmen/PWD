@@ -978,8 +978,9 @@
     park:  { g: 'f', shirt: '#c9a77c', pants: '#6b8f5e', apron: '#5f9a5c', straw: true, hair: '#7a5236', style: 'bob' },
     sewer: { g: 'm', shirt: '#2f4570', pants: '#2f4570', jacket: true, hat: '#ff8a3d', lamp: true, hair: '#2f2621' },
     geo:   { g: 'm', shirt: '#cdb58a', pants: '#8a7a5c', ranger: true, pack: '#6f7d4f', hair: '#3a2a22' },
-    player:  { g: 'm', shirt: '#ffffff', pants: '#4d5b85', vest: '#4a7fd4', stripe: '#d8e8ff', hat: '#ffffff', hair: '#3a2a22' },
-    playerF: { g: 'f', shirt: '#ffffff', pants: '#4d5b85', vest: '#e0707e', stripe: '#ffe0e4', hat: '#ffffff', hair: '#5a3c2c', style: 'pony' }
+    // 玩家：日系自然風旅人（依 Nano Banana 2 設定圖 assets/avatar/m-full.png、f-full.png）
+    player:  { g: 'm', shirt: '#e9dcc2', pants: '#cdb48a', coat: '#6f7f4e', cuff: '#d9c49c', boots: '#8a5a36', bucket: '#efe7d4', pack: '#4f6a45', bottle: true, camera: true, map: true, hair: '#1f1d22' },
+    playerF: { g: 'f', shirt: '#f6f1e6', pants: '#f2d6c0', coat: '#d6a945', skirt: '#9db597', boots: '#efe4cf', straw: true, ribbon: '#a9d3ef', pack: '#b8743c', small: true, booklet: true, hair: '#1f1d22', style: 'long' }
   };
   function makeNPC(outfit) {
     const o = OUTFIT[outfit] || OUTFIT.hub, p = G(null), v = (x, y, z) => new V3(x, y, z);
@@ -996,13 +997,28 @@
       vest.position.y = 1.16; vest.scale.z = .86; vest.castShadow = true; body.add(vest); outline(vest, .02);
       if (o.stripe) [1.0, 1.2].forEach(y => { const s = new T.Mesh(new T.CylinderGeometry(.385, .385, .05, 20, 1, true, .55, Math.PI * 2 - 1.1), toon(o.stripe, { side: T.DoubleSide })); s.position.y = y; s.scale.z = .87; body.add(s); });
     }
+    if (o.coat) {   // 敞開的外套／針織開襟衫
+      const coat = new T.Mesh(new T.CylinderGeometry(.37, .41, .74, 20, 1, true, .42, Math.PI * 2 - .84), toon(o.coat, { side: T.DoubleSide }));
+      coat.position.y = 1.12; coat.scale.z = .88; coat.castShadow = true; body.add(coat); outline(coat, .02);
+      [-1, 1].forEach(sx => M(box(.07, .62, .03), o.coat, { x: sx * .13, y: 1.14, z: .31, rz: sx * -.05, parent: body, ol: .01 }));
+      M(new T.TorusGeometry(.22, .05, 6, 16, Math.PI), o.coat, { y: 1.47, z: -.04, rx: -Math.PI / 2 + .3, parent: body, ol: .01 });
+    }
+    if (o.skirt) M(new T.CylinderGeometry(.3, .5, .78, 22), o.skirt, { y: .58, parent: body, ol: .022 });
+    if (o.cuff) legs.forEach(l => M(cyl(.135, .135, .09, 12), o.cuff, { y: -.55, parent: l, ol: .01 }));
+    if (o.camera) { tube(body, v(-.28, 1.5, .1), v(.18, .98, .3), .015, '#3a3328'); M(box(.2, .13, .09), '#2f3138', { x: .12, y: 1.02, z: .33, parent: body, ol: .012 });
+      M(cyl(.045, .05, .07, 12), '#56606e', { x: .12, y: 1.02, z: .39, rx: Math.PI / 2, parent: body, ol: 0 }); }
     if (o.jacket && o.stripe) { const s = new T.Mesh(new T.CylinderGeometry(.37, .37, .05, 20, 1, true), toon(o.stripe, { side: T.DoubleSide })); s.position.y = 1.05; s.scale.z = .85; body.add(s); }
     if (o.jacket) { M(box(.03, .5, .02), '#dfe6ee', { y: 1.18, z: .3, parent: body, ol: 0 }); M(new T.TorusGeometry(.2, .06, 6, 16, Math.PI), o.shirt, { y: 1.45, z: -.05, rx: -Math.PI / 2 + .3, parent: body, ol: .01 }); }
     if (o.apron) { M(box(.42, .62, .05), o.apron, { y: 1.08, z: .29, parent: body, ol: .015 }); M(box(.18, .12, .055), '#4f8a4c', { y: 1.0, z: .315, parent: body, ol: 0 });
       [-1, 1].forEach(s => M(box(.05, .32, .04), o.apron, { x: s * .14, y: 1.42, z: .25, rx: -.2, parent: body, ol: 0 })); }
     if (outfit === 'hub') { tube(body, v(-.12, 1.5, .25), v(0, 1.2, .3), .012, '#3a63b8'); tube(body, v(.12, 1.5, .25), v(0, 1.2, .3), .012, '#3a63b8');
       M(box(.16, .2, .02), '#ffffff', { y: 1.12, z: .31, parent: body, ol: .01 }); M(box(.06, .07, .022), '#8fb4e8', { x: -.03, y: 1.15, z: .315, parent: body, ol: 0 }); }
-    if (o.pack) { M(box(.5, .55, .26), o.pack, { y: 1.2, z: -.36, parent: body, ol: .025 }); M(box(.42, .18, .1), '#5d6a40', { y: 1.0, z: -.5, parent: body, ol: .01 });
+    if (o.pack && o.small) { M(box(.36, .4, .18), o.pack, { y: 1.18, z: -.33, parent: body, ol: .02 }); M(box(.3, .12, .06), '#9a5f2f', { y: 1.05, z: -.43, parent: body, ol: .01 });
+      [-1, 1].forEach(s => M(box(.045, .46, .035), '#8a5428', { x: s * .17, y: 1.25, z: .27, parent: body, ol: 0 })); }
+    else if (o.pack && o.bottle) { M(box(.52, .6, .28), o.pack, { y: 1.22, z: -.38, parent: body, ol: .025 }); M(cyl(.12, .12, .5, 14), '#3f5838', { y: 1.6, z: -.38, rz: Math.PI / 2, parent: body, ol: .015 });
+      M(cyl(.06, .06, .2, 10), '#cfd8e2', { x: .3, y: 1.05, z: -.38, parent: body, ol: .01 }); M(cyl(.035, .035, .05, 8), '#56606e', { x: .3, y: 1.17, z: -.38, parent: body, ol: 0 });
+      [-1, 1].forEach(s => M(box(.05, .5, .04), '#6a4a2c', { x: s * .2, y: 1.25, z: .22, parent: body, ol: 0 })); }
+    else if (o.pack) { M(box(.5, .55, .26), o.pack, { y: 1.2, z: -.36, parent: body, ol: .025 }); M(box(.42, .18, .1), '#5d6a40', { y: 1.0, z: -.5, parent: body, ol: .01 });
       [-1, 1].forEach(s => M(box(.05, .5, .04), '#4b5634', { x: s * .2, y: 1.25, z: .2, parent: body, ol: 0 })); }
     // 頭（大頭 Q 版）
     const head = G(body, 0, 1.92, 0);
@@ -1029,6 +1045,8 @@
     if (o.g === 'f') {
       [-1, 1].forEach(sx => M(new T.CapsuleGeometry(.07, .3, 3, 8), hc, { x: sx * .38, y: -.15, z: .1, parent: head, ol: .01 }));
       if (o.style === 'pony') { M(sph(.16, 2), hc, { y: -.12, z: -.42, s: [.9, 1.3, .9], parent: head, ol: .015 }); M(cyl(.06, .06, .06, 10), '#e0707e', { y: .05, z: -.38, rx: .4, parent: head, ol: 0 }); }
+      if (o.style === 'long') { M(new T.CapsuleGeometry(.3, .26, 4, 14), hc, { y: -.26, z: -.2, s: [1.1, 1, .55], parent: head, ol: .015 });
+        [-1, 1].forEach(sx => M(new T.CapsuleGeometry(.08, .36, 3, 8), hc, { x: sx * .36, y: -.26, z: .06, parent: head, ol: .01 })); }
       if (o.style === 'bob') M(sph(.46, 3), hc, { y: -.08, z: -.08, s: [1.02, .75, 1], parent: head, ol: .015 });
     }
     // 帽子
@@ -1039,13 +1057,18 @@
     if (o.lamp) { M(cyl(.09, .09, .1, 12), '#3d4258', { y: .3, z: .43, rx: Math.PI / 2 - .2, parent: head, ol: .01 });
       M(cyl(.065, .065, .02, 12), '#fff6c9', { y: .31, z: .49, rx: Math.PI / 2 - .2, parent: head, ol: 0, mat: new T.MeshBasicMaterial({ color: '#fff6c9' }) }); }
     if (o.straw) { M(cyl(.66, .66, .04, 28), '#e8c98a', { y: .24, parent: head, ol: .02 }); M(cyl(.3, .36, .28, 20), '#e8c98a', { y: .38, parent: head, ol: .02 });
-      M(cyl(.365, .365, .07, 20), '#5f9a5c', { y: .28, parent: head, ol: 0 }); }
+      M(cyl(.365, .365, .07, 20), o.ribbon || '#5f9a5c', { y: .28, parent: head, ol: 0 });
+      if (o.ribbon) { [-1, 1].forEach(sx => M(sph(.08, 1), o.ribbon, { x: .3 + sx * .07, y: .3, z: .2, s: [1, .6, .5], parent: head, ol: .008 }));
+        M(box(.05, .32, .02), o.ribbon, { x: .36, y: .1, z: .22, rz: .2, parent: head, ol: .006 }); } }
+    if (o.bucket) { M(new T.CylinderGeometry(.62, .44, .16, 28, 1, true), o.bucket, { y: .2, parent: head, ol: .02, mat: toon(o.bucket, { side: T.DoubleSide }) });
+      M(new T.SphereGeometry(.45, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), o.bucket, { y: .26, s: [1, .75, 1], parent: head, ol: .02 });
+      M(cyl(.455, .455, .06, 24), '#d9cdb2', { y: .3, parent: head, ol: 0 }); }
     if (o.ranger) { M(cyl(.6, .6, .04, 28), '#a8956b', { y: .2, parent: head, ol: .02 }); M(cyl(.3, .36, .3, 20), '#a8956b', { y: .36, parent: head, ol: .02 });
       M(cyl(.365, .365, .06, 20), '#7a6a4a', { y: .25, parent: head, ol: 0 }); }
     // 手臂（上臂＋前臂＋手）
     const arm = (sx) => { const sh = G(body, sx * .38, 1.42, 0), el = G(sh, 0, -.3, 0);
-      M(new T.CapsuleGeometry(.085, .2, 3, 8), o.jacket ? o.shirt : o.shirt, { y: -.15, parent: sh, ol: .015 });
-      M(new T.CapsuleGeometry(.08, .18, 3, 8), o.shirt, { y: -.13, parent: el, ol: .015 });
+      M(new T.CapsuleGeometry(.085, .2, 3, 8), o.coat || o.shirt, { y: -.15, parent: sh, ol: .015 });
+      M(new T.CapsuleGeometry(.08, .18, 3, 8), o.coat || o.shirt, { y: -.13, parent: el, ol: .015 });
       M(sph(.085, 2), SKIN, { y: -.3, parent: el, ol: .012 }); sh.rotation.z = sx * .15; return { sh, el }; };
     const R = arm(1), Lf = arm(-1);
     const hand = G(Lf.el, 0, -.32, .04);
@@ -1055,6 +1078,8 @@
       M(new T.TorusGeometry(.05, .02, 4, 10), '#e0505e', { y: .07, x: .05, parent: hand, ol: 0 }); M(new T.TorusGeometry(.05, .02, 4, 10), '#e0505e', { y: .07, x: -.05, parent: hand, ol: 0 }); Lf.el.rotation.x = -1.1; }
     if (outfit === 'sewer') { M(box(.14, .2, .08), '#ffd166', { y: .02, parent: hand, ol: .012 }); M(box(.08, .05, .02), '#7cf0b0', { y: .06, z: .05, parent: hand, ol: 0, mat: new T.MeshBasicMaterial({ color: '#7cf0b0' }) }); Lf.el.rotation.x = -1.2; }
     if (outfit === 'geo') { M(cyl(.025, .03, 1.3, 6), '#a8794f', { y: -.1, parent: hand, ol: .01 }); }
+    if (o.map) { M(box(.34, .26, .015), '#e9f1e2', { y: .06, rx: -.4, rz: .25, parent: hand, ol: .01 }); M(box(.12, .1, .017), '#8fc6e8', { x: .05, y: .08, rx: -.4, rz: .25, parent: hand, ol: 0 }); Lf.el.rotation.x = -1.0; }
+    if (o.booklet) { M(box(.16, .22, .04), '#8fc6e8', { y: .02, rx: -.2, parent: hand, ol: .01 }); M(box(.12, .05, .042), '#ffffff', { y: .06, rx: -.2, parent: hand, ol: 0 }); Lf.el.rotation.x = -.9; }
     if (outfit === 'hub') { M(box(.24, .3, .03), '#f3d9a8', { y: .02, rx: -.3, parent: hand, ol: .012 }); Lf.el.rotation.x = -1.2; }
     p.userData = { legs, armR: R.sh, elR: R.el, armL: Lf.sh, head, lids, mouth: { smile, open }, body, blinkT: Math.random() * 3 };
     p.userData.anim = (t, dt, talking, walking) => {
@@ -2334,9 +2359,9 @@
     init, flyTo, setMode, setSeason, setQuality, projectZones, overviewHome,
     setViewShift: v => { viewShiftGoal = v; },
     setTime: k => setTime(k), get timeMode() { return W.todMode; }, get night() { return W.nightLevel || 0; },
-    setView: v => { W.view = v; if (v === 'third' && W.avatar) W.camera.position.set(cam.pos.x, cam.pos.y + 3, cam.pos.z + 6); },
+    setView: v => { W.view = v; if (v === 'third' && W.avatar) { W.avatar.rotation.y = cam.yaw + Math.PI; W.camera.position.set(cam.pos.x + Math.sin(cam.yaw) * 6.5, cam.pos.y + 3, cam.pos.z + Math.cos(cam.yaw) * 6.5); } },
     get view() { return W.view || 'first'; },
-    setAvatar: g => { if (W.avatar) W.scene.remove(W.avatar); W.avatar = makeNPC(g === 'f' ? 'playerF' : 'player'); W.avatar.visible = false; W.scene.add(W.avatar); W.avatarG = g; },
+    setAvatar: g => { if (W.avatar) W.scene.remove(W.avatar); W.avatar = makeNPC(g === 'f' ? 'playerF' : 'player'); W.avatar.visible = false; W.avatar.rotation.y = cam.yaw + Math.PI; W.scene.add(W.avatar); W.avatarG = g; },
     setReducedMotion: v => { W.reduced = v; if (W.particleMat) W.particleMat.visible = !v; },
     projectNPC: id => { const n = W.npcs.find(x => x.id === id); if (!n) return null;
       const h = n.obj ? 2.9 : n.data.outfit === 'god' ? 4.4 : 3.4; tmp.set(n.pos.x, n.pos.y + h, n.pos.z).project(W.camera);
