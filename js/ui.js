@@ -338,7 +338,7 @@
     if (n.special === 'ticket') {
       const left = ZONES.length - visited.size;
       if (left <= 0) { talk(L.N(n, 'ready'), n, null); acts.innerHTML = `<button class="btn btn-primary" onclick="event.stopPropagation();UI.redeem()">${t('redeem')}</button>`; }
-      else { talk(L.N(n, 'notYet')(left), n, null); setMood(n, 'worried'); acts.innerHTML = `<button class="btn btn-glass" onclick="event.stopPropagation();UI.openStamps()">${t('passportBtn')}</button>`; }
+      else { const msg = L.N(n, 'notYet')(left); talk(L.lang === 'zh' && SITE.voiceFiles && left <= 5 ? { text: msg, audio: `assets/voice/obs-1-left${left}.mp3` } : msg, n, null); setMood(n, 'worried'); acts.innerHTML = `<button class="btn btn-glass" onclick="event.stopPropagation();UI.openStamps()">${t('passportBtn')}</button>`; }
       acts.hidden = false;
     } else { const greet = L.N(n, 'greet'), gi = Math.random() * greet.length | 0; talk(greet[gi], n, L.lang === 'zh' ? `${n.id}-g${gi + 1}` : null); }
     const p = $('#prompt'); $('#prompt-text').textContent = t('talk', L.N(n, 'name')); p.hidden = false; p.onclick = nextLine;

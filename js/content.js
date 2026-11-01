@@ -237,7 +237,7 @@ window.NPCS = [
     lines: ['行道樹我們都有建檔照顧，修剪也會避開鳥類築巢的季節。',
             '路燈不亮的話，記下燈桿上的編號，報修會更快喔。',
             '共融式遊戲場讓不同能力的孩子都能一起玩。',
-            '公園是大家的客廳，垃圾記得帶走，一起保持乾淨。'] },
+            '公園是大家的客廳，離開前把自己的東西帶走，一起保持乾淨。'] },
   { id: 'sso-1', zone: 'sso', name: '阿淨', role: '衛工處下水道工程師', outfit: 'sewer', voice: { pitch: .95, rate: 1.0, prefer: 'male' },
     greet: ['嘿！別看下面黑黑的，水在這裡會變乾淨喔！', '您好～那隻烏龜是我們的巡檢夥伴，常常探頭打招呼。'],
     lines: ['家裡的污水接進下水道，經過處理後才回到河川，河才會越來越乾淨。',
@@ -299,3 +299,7 @@ if (window.SITE.voiceFiles) (window.NPCS || []).forEach(n => {
   if (n.lines) n.lines = n.lines.map((t, i) => v(t, i + 1));
   if (n.ready) n.ready = v(n.ready, 'ready');
 });
+// 節慶台詞：assets/voice/fest-<節慶 id>-<NPC id>.mp3
+if (window.SITE.voiceFiles) (window.FESTIVALS || []).forEach(f => Object.keys(f.lines || {}).forEach(id => {
+  f.lines[id] = f.lines[id].map(t => (typeof t === 'string' ? { text: t, audio: `assets/voice/fest-${f.id}-${id}.mp3` } : t));
+}));
