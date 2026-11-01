@@ -221,32 +221,28 @@
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.4;
     s.add(sun);
 
-    buildSky(opts.skyImage);
-    buildGround();
-    buildRoads();
-    buildRiver();
-    buildHub();
-    buildNCO();
-    buildHEO();
-    buildPKL();
-    buildSSO();
-    buildGEO();
-    buildCityFiller();
-    buildGroves();
-    buildClouds();
-    buildBirds();
-    buildParticles();
-    buildHitboxes();
-    setSeason('spring');
-    setOutlines(W.outlines);
-    buildNightSky();
-    W.scene.traverse(o => { const m = o.material; if (m && !Array.isArray(m) && m.map && m.map.userData && m.map.userData.night && !m.userData.lit) { m.userData.lit = 1; litMaterial(m, m.map.userData.night, '#ffffff', 1.2); } });
-    setTime('auto'); W.tod.k = 1; W.tod.from = W.tod.to;
-    buildPost(); setPost(W.quality === 'high' || (W.quality === 'auto' && !isMobile));
-    bindInput(r.domElement);
-    addEventListener('resize', () => resize(container));
-    resizeObserver(container);
-    animate();
+    // 分段建置：每段之間讓出主執行緒，載入條可以前進、畫面不會卡住
+    const prog = opts.onProgress || (() => { });
+    const steps = [
+      () => buildSky(opts.skyImage), buildGround, buildRoads, buildRiver, buildHub, buildNCO, buildHEO, buildPKL, buildSSO, buildGEO,
+      buildCityFiller, buildGroves, () => { buildClouds(); buildBirds(); buildParticles(); buildHitboxes(); },
+      () => { setSeason('spring'); setOutlines(W.outlines); buildNightSky();
+        W.scene.traverse(o => { const m = o.material; if (m && !Array.isArray(m) && m.map && m.map.userData && m.map.userData.night && !m.userData.lit) { m.userData.lit = 1; litMaterial(m, m.map.userData.night, '#ffffff', 1.2); } });
+        setTime('auto'); W.tod.k = 1; W.tod.from = W.tod.to;
+        buildPost(); setPost(W.quality === 'high' || (W.quality === 'auto' && !isMobile)); }
+    ];
+    const yieldNow = () => new Promise(res => setTimeout(res, 0));
+    W.ready = (async () => {
+      for (let i = 0; i < steps.length; i++) { steps[i](); prog(.15 + .6 * (i + 1) / steps.length); await yieldNow(); }
+      // 著色器平行編譯（KHR_parallel_shader_compile）：避免第一格畫面卡住數秒
+      try { if (r.compileAsync) await r.compileAsync(W.scene, W.camera); } catch (e) { }
+      prog(.95);
+      bindInput(r.domElement);
+      addEventListener('resize', () => resize(container));
+      resizeObserver(container);
+      animate();
+      return W;
+    })();
     return W;
   }
 
@@ -1049,7 +1045,7 @@
       if (o.style === 'pony') { M(sph(.16, 2), hc, { y: -.12, z: -.42, s: [.9, 1.3, .9], parent: head, ol: .015 }); M(cyl(.06, .06, .06, 10), '#e0707e', { y: .05, z: -.38, rx: .4, parent: head, ol: 0 }); }
       if (o.style === 'long') { M(new T.CapsuleGeometry(.3, .26, 4, 14), hc, { y: -.26, z: -.2, s: [1.1, 1, .55], parent: head, ol: .015 });
         [-1, 1].forEach(sx => M(new T.CapsuleGeometry(.08, .36, 3, 8), hc, { x: sx * .36, y: -.26, z: .06, parent: head, ol: .01 })); }
-      if (o.style === 'bob') M(sph(.46, 3), hc, { y: -.08, z: -.08, s: [1.02, .75, 1], parent: head, ol: .015 });
+      if (o.style === 'bob') M(sph(.46, 3), hc, { y: -.06, z: -.16, s: [1.04, .78, .78], parent: head, ol: .015 });   // 鮑伯頭只包住後腦與兩側，不遮臉
     }
     // 帽子
     if (o.hat) { M(new T.SphereGeometry(.47, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), o.hat, { y: .12, parent: head, ol: .03 });
@@ -2526,20 +2522,24 @@
   }
   W.updaters.push((t, dt) => updateFW(dt));
 
+  // 第三人稱角色：需要時才建立（加快首次載入）
+  function ensureAvatar() { if (W.avatar || !W.scene) return; W.avatar = makeNPC(W.avatarG === 'f' ? 'playerF' : 'player'); W.avatar.visible = false; W.avatar.rotation.y = cam.yaw + Math.PI; W.scene.add(W.avatar); }
   window.World = {
-    init, flyTo, setMode, setSeason, setQuality, projectZones, overviewHome,
+    init, flyTo, setMode, setSeason, setQuality, projectZones, overviewHome, get ready() { return W.ready; },
     setViewShift: v => { viewShiftGoal = v; },
     startRide, startFireworks, stopFireworks, get fireworksOn() { return FW.active; }, get fwTime() { return W.clock.elapsedTime - FW.t0; },
     get boothPos() { return new V3(24, 0, 2.2); },
     setTime: k => setTime(k), get timeMode() { return W.todMode; }, get night() { return W.nightLevel || 0; },
-    setView: v => { W.view = v; if (v === 'third' && W.avatar) { W.avatar.rotation.y = cam.yaw + Math.PI; W.camera.position.set(cam.pos.x + Math.sin(cam.yaw) * 6.5, cam.pos.y + 3, cam.pos.z + Math.cos(cam.yaw) * 6.5); } },
+    setView: v => { W.view = v; if (v === 'third') ensureAvatar(); if (v === 'third' && W.avatar) { W.avatar.rotation.y = cam.yaw + Math.PI; W.camera.position.set(cam.pos.x + Math.sin(cam.yaw) * 6.5, cam.pos.y + 3, cam.pos.z + Math.cos(cam.yaw) * 6.5); } },
     get view() { return W.view || 'first'; },
-    setAvatar: g => { if (W.avatar) W.scene.remove(W.avatar); W.avatar = makeNPC(g === 'f' ? 'playerF' : 'player'); W.avatar.visible = false; W.avatar.rotation.y = cam.yaw + Math.PI; W.scene.add(W.avatar); W.avatarG = g; },
+    setAvatar: g => { if (W.avatar) { W.scene.remove(W.avatar); W.avatar = null; } W.avatarG = g; if (W.view === 'third') ensureAvatar(); },
     setReducedMotion: v => { W.reduced = v; if (W.particleMat) W.particleMat.visible = !v; },
     projectNPC: id => { const n = W.npcs.find(x => x.id === id); if (!n) return null;
       const h = n.obj ? 2.9 : n.data.outfit === 'god' ? 4.4 : 3.4; tmp.set(n.pos.x, n.pos.y + h, n.pos.z).project(W.camera);
       const c = W.renderer.domElement; return { x: (tmp.x + 1) / 2 * c.clientWidth, y: (1 - tmp.y) / 2 * c.clientHeight, visible: tmp.z < 1 }; },
     teleport: (x, z, yaw) => { cam.fp = null; cam.pos.set(x, 2.4, z); cam.yaw = yaw; cam.vel.set(0, 0, 0); },
+    npcPos: id => { const n = W.npcs.find(x => x.id === id); return n && (n.obj ? n.obj.position : n.pos); },
+    npcYaw: id => { const n = W.npcs.find(x => x.id === id); return n && n.obj ? n.obj.rotation.y : 0; },
     npcWave: id => { const n = W.npcs.find(x => x.id === id); if (n) n.wave = 1.6; },
     npcTalk: (id, sec) => { const n = W.npcs.find(x => x.id === id); if (n) n.talkUntil = W.clock.elapsedTime + sec; },
     listenerPos: () => (W.mode === 'explore' ? cam.pos : cam.target),

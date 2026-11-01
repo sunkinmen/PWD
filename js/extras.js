@@ -59,7 +59,7 @@
 
   /* ---------- 4. PWA：註冊 Service Worker（離線快取）---------- */
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
+    addEventListener('load', () => setTimeout(() => navigator.serviceWorker.register('sw.js').catch(() => { }), 6000));   // 晚 6 秒再註冊，不和首次載入搶頻寬
   }
 
   window.Extras = { loadSheet, track, activeFestivals, autoSeason, applyFestivalLines };

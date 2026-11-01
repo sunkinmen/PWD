@@ -21,7 +21,7 @@ window.SITE = {
   sheetCsv: '',
   // ── 使用數據：Google Analytics 4 評估 ID（G-XXXXXXX），留空則不追蹤
   ga4Id: '',
-  voiceFiles: false,                   // 有 ElevenLabs 等錄好的 mp3 放進 assets/voice/ 後改成 true（檔名見 README）
+  voiceFiles: true,                    // 有 ElevenLabs 等錄好的 mp3 放進 assets/voice/ 後改成 true（檔名見 README）
   skyImage: 'assets/sky-taipei.jpg',   // Nano Banana 2 生成的台北全景（找不到時自動改用程式繪製天空）
   updated: '2026-10-31'
 };
@@ -290,3 +290,12 @@ window.FESTIVALS = [
   { id: 'xmas', from: '12-15', to: '01-02', season: 'winter', banner: '🎄 聖誕跨年快樂！市府周邊交通管制請留意公告',
     lines: { 'hub-1': ['跨年活動在市府前，記得搭捷運最方便！'] } }
 ];
+
+/* 真人配音（ElevenLabs）：把台詞轉成 { text, audio }，之後節慶台詞插在前面也不會對錯檔案。
+   檔名規則：assets/voice/<NPC id>-g1.mp3（招呼語）、<id>-1.mp3…（對話）、<id>-ready.mp3（101 兌換） */
+if (window.SITE.voiceFiles) (window.NPCS || []).forEach(n => {
+  const v = (t, k) => (typeof t === 'string' ? { text: t, audio: `assets/voice/${n.id}-${k}.mp3` } : t);
+  if (n.greet) n.greet = n.greet.map((t, i) => v(t, 'g' + (i + 1)));
+  if (n.lines) n.lines = n.lines.map((t, i) => v(t, i + 1));
+  if (n.ready) n.ready = v(n.ready, 'ready');
+});

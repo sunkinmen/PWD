@@ -28,7 +28,10 @@
       { "@type": "GovernmentOrganization", "name": "大地工程處", "url": "https://geo.gov.taipei/" } ] }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@900&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@900&family=Outfit:wght@400;600;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="js/vendor/three.min.js" as="script">
+  <link rel="preload" href="js/world.js" as="script">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -108,11 +111,11 @@
       <canvas id="minimap" width="180" height="180" aria-hidden="true"></canvas>
       <div class="view-pill" role="group" data-i18n-aria="viewMode">
         <button id="btn-view" onclick="UI.toggleView()"><i data-ico="eye"></i><span id="view-txt" data-i18n="firstP">第一人稱</span><span class="kbd">V</span></button>
-        <button id="btn-avatar" onclick="UI.toggleAvatar()" data-i18n-aria="avatar"><img id="avatar-thumb" src="assets/avatar/m.jpg" alt=""></button>
+        <button id="btn-avatar" onclick="UI.toggleAvatar()" data-i18n-aria="avatar"><img loading="lazy" id="avatar-thumb" src="assets/avatar/m.jpg" alt=""></button>
       </div>
       <button id="prompt" hidden><span class="kbd">E</span><span id="prompt-text"></span></button>
       <div id="npc-bubble" hidden onclick="UI.nextLine()" role="button" tabindex="0">
-        <div class="vn-portrait"><img id="npc-avatar" alt="" onerror="this.hidden=true"></div>
+        <div class="vn-portrait"><img loading="lazy" id="npc-avatar" alt="" onerror="this.hidden=true"></div>
         <div class="vn-box">
           <div class="npc-head"><b id="npc-name"></b><small id="npc-role"></small></div>
           <p id="npc-text" aria-live="polite"></p>
@@ -167,7 +170,7 @@
       <h4 data-i18n="viewMode">視角</h4>
       <div class="seg" id="seg-view"><button data-v="first" data-i18n="firstP">第一人稱</button><button data-v="third" data-i18n="thirdP">第三人稱</button></div>
       <h4 data-i18n="avatar">我的角色</h4>
-      <div class="seg avatar-seg" id="seg-avatar"><button data-v="m"><img class="av-img" src="assets/avatar/m.jpg" alt=""><span data-i18n="avatarM">男旅人</span></button><button data-v="f"><img class="av-img" src="assets/avatar/f.jpg" alt=""><span data-i18n="avatarF">女旅人</span></button></div>
+      <div class="seg avatar-seg" id="seg-avatar"><button data-v="m"><img loading="lazy" class="av-img" src="assets/avatar/m.jpg" alt=""><span data-i18n="avatarM">男旅人</span></button><button data-v="f"><img loading="lazy" class="av-img" src="assets/avatar/f.jpg" alt=""><span data-i18n="avatarF">女旅人</span></button></div>
       <h4 data-i18n="more">其他</h4>
       <div class="menu-list">
         <button onclick="UI.close('menu');UI.openA11y()" data-i18n="a11yMode">♿ 純文字無障礙版</button>
@@ -239,7 +242,7 @@
       <p class="fine" data-i18n="stampsHint">走進每個工程世界、靠近處本部就能蓋章。六枚集滿，山神爺爺會親自祝福你！</p>
       <div class="stamp-grid" id="stamp-grid"></div>
       <div class="reward-row" id="reward-row">
-        <img src="assets/101/ticket.jpg" alt="">
+        <img loading="lazy" src="assets/101/ticket.jpg" alt="">
         <div><b data-i18n="rewardTitle">集滿六枚：免費登上 101 觀景台</b><small id="reward-sub"></small></div>
         <button class="btn btn-primary" onclick="UI.close('stamps');UI.goBooth()"><i data-ico="map"></i> <span data-i18n="goBooth">前往兌換處</span></button>
       </div>
@@ -253,7 +256,7 @@
   <div id="celebrate" role="dialog" aria-modal="true" aria-labelledby="cele-h" hidden>
     <canvas id="confetti"></canvas>
     <div class="cele-card">
-      <img src="assets/npc/god-happy.jpg" alt="" class="cele-god">
+      <img loading="lazy" src="assets/npc/god-happy.jpg" alt="" class="cele-god">
       <h3 id="cele-h" data-i18n="celeTitle">恭喜集滿六枚工務章！</h3>
       <p data-i18n="celeText">山神爺爺：「你走遍了道路、河川、公園、下水道和山林，臺北因為有你這樣關心市政的人，會更美好。老夫在此賜福！」</p>
       <div class="tour-actions"><button class="btn btn-ghost" onclick="UI.closeCelebrate()" data-i18n="later">稍後</button><button class="btn btn-primary" onclick="UI.closeCelebrate();UI.goBooth()" data-i18n="getCert">前往 101 兌換門票</button></div>
@@ -263,7 +266,7 @@
   <!-- 101 觀景台門票 -->
   <div id="ticket" role="dialog" aria-modal="true" aria-labelledby="ticket-h" hidden>
     <div class="ticket-wrap">
-      <div class="ticket-card"><img src="assets/101/ticket.jpg" alt="">
+      <div class="ticket-card"><img loading="lazy" src="assets/101/ticket.jpg" alt="">
         <div class="ticket-stub"><small>TAIPEI 101 OBSERVATORY</small><b id="ticket-h">89F</b><span data-i18n="ticketAdmit">觀景台 單人入場</span><em id="ticket-name"></em><time id="ticket-date"></time>
           <div class="ticket-stamps" id="ticket-stamps"></div></div>
         <div class="ticket-title"><span data-i18n="ticketTitle">臺北工務探索世界</span><b data-i18n="ticketSub">觀景台門票</b></div>

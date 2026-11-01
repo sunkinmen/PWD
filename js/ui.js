@@ -25,11 +25,16 @@
     if (window.Extras) { Extras.applyFestivalLines(); Extras.loadSheet().then(ok => { if (ok && started && World.mode === 'overview') select(current, true); }); }
 
     const fill = $('#loader-fill'), txt = $('#loader-text');
-    let p = 0; const iv = setInterval(() => { p = Math.min(p + 12, 90); fill.style.width = p + '%'; }, 120);
+    let p = 0; const iv = setInterval(() => { p = Math.min(p + 3, 14); fill.style.width = p + '%'; }, 120);
     const go = () => setTimeout(() => {
       const sky = (location.protocol === 'file:' && window.SKY_DATA) ? window.SKY_DATA : SITE.skyImage;
-      try { World.init($('#world'), { skyImage: sky, quality: safeGet('pwd3d-quality') || 'auto' }); }
-      catch (e) { console.error(e); txt.textContent = '您的瀏覽器不支援 3D，已切換為純文字版'; setTimeout(openA11y, 800); clearInterval(iv); return; }
+      const fail = e => { console.error(e); txt.textContent = '您的瀏覽器不支援 3D，已切換為純文字版'; setTimeout(openA11y, 800); clearInterval(iv); };
+      clearInterval(iv);
+      try { World.init($('#world'), { skyImage: sky, quality: safeGet('pwd3d-quality') || 'auto', onProgress: k => { fill.style.width = Math.round(k * 100) + '%'; } }); }
+      catch (e) { return fail(e); }
+      World.ready.then(afterInit, fail);
+    }, 30);
+    function afterInit() {
       World.setSeason(safeGet('pwd3d-season') || (window.Extras ? Extras.autoSeason() : 'spring'));
       if (safeGet('pwd3d-voice') === 'off') Sound.setVoice(false);
       const rm = safeGet('pwd3d-motion') || (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'on' : 'off'); setMotion(rm);
@@ -40,13 +45,13 @@
       buildTiles(); buildLabels(); bindKeys(); bindJoystick(); clock(); showFestival();
       World.on('zoneClick', id => { if (!started) return; World.mode === 'explore' ? openSheet(id) : select(id); });
       World.on('proximity', onProximity); World.on('frame', onFrame); World.on('modeChange', onMode); World.on('npc', onNPC); World.on('ride', onRide);
-      clearInterval(iv); fill.style.width = '100%';
+      fill.style.width = '100%';
       setTimeout(() => $('#loader').classList.add('done'), 300);
       setTimeout(() => $('#loader').remove(), 1000);
       // 分享網址：#nco 這類連結直接進入該處
       const h = location.hash.replace('#', ''); if (zone(h)) { start('overview'); select(h); }
       addEventListener('hashchange', () => { const id = location.hash.replace('#', ''); if (zone(id) && id !== current) { if (!started) start('overview'); select(id); } });
-    }, 60);
+    }
     if (location.protocol === 'file:') { const sc = document.createElement('script'); sc.src = 'assets/sky-offline.js'; sc.onload = sc.onerror = go; document.head.appendChild(sc); }
     else go();
   }
@@ -415,7 +420,7 @@
     $('#celebrate').hidden = false; lastFocus = document.activeElement; setTimeout(() => $('#celebrate .btn-primary').focus(), 50);
     if (window.Sound && Sound.fanfare) Sound.fanfare();
     if (World.npcWave) World.npcWave('god');
-    if (Sound.say) { const n = npcData('god'); Sound.say(t('celeText').replace(/^.*?[「“]|[」”]$/g, ''), Object.assign({ lang: L.lang }, n && n.voice)); }
+    if (Sound.say) { const n = npcData('god'), txt = t('celeText').replace(/^.*?[「“]|[」”]$/g, ''); Sound.say(L.lang === 'zh' && SITE.voiceFiles ? { text: txt, audio: 'assets/voice/god-bless.mp3' } : txt, Object.assign({ lang: L.lang }, n && n.voice)); }
     confetti(); track('all_stamps');
   }
   function closeCelebrate() { $('#celebrate').hidden = true; Sound.stopVoice && Sound.stopVoice(); if (lastFocus) lastFocus.focus(); }

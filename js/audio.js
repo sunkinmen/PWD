@@ -191,32 +191,37 @@
   let voices = [], voiceOn = true, current = null;
   const loadVoices = () => { voices = ('speechSynthesis' in window) ? speechSynthesis.getVoices() : []; };
   if ('speechSynthesis' in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
-  const FEMALE = /hsiaochen|hsiaoyu|yating|hanhan|mei-?jia|female|女/i, MALE = /zhiwei|yunjhe|male|男/i;
-  function pickVoice(prefer) {
-    const tw = voices.filter(v => /zh[-_]TW|Taiwan|臺灣|台灣/i.test(v.lang + ' ' + v.name));
-    const pool = tw.length ? tw : voices.filter(v => /^zh|^cmn/i.test(v.lang));
+  // 優先順序：Edge 的 Microsoft 自然語音（HsiaoChen／HsiaoYu／YunJhe，最接近真人）＞ Google 國語（臺灣）＞ 其他中文
+  const FEMALE = /hsiaochen|hsiaoyu|yating|hanhan|mei-?jia|female|女/i, MALE = /yunjhe|zhiwei|male|男/i;
+  function pickVoice(prefer, en) {
+    const pool = en ? voices.filter(v => /^en[-_]US/i.test(v.lang)) : (voices.filter(v => /zh[-_]TW|Taiwan|臺灣|台灣/i.test(v.lang + ' ' + v.name)).length
+      ? voices.filter(v => /zh[-_]TW|Taiwan|臺灣|台灣/i.test(v.lang + ' ' + v.name)) : voices.filter(v => /^zh|^cmn/i.test(v.lang)));
     if (!pool.length) return null;
-    const score = v => (/natural|online|neural/i.test(v.name) ? 4 : 0) + (prefer === 'female' && FEMALE.test(v.name) ? 3 : 0) + (prefer === 'male' && MALE.test(v.name) ? 3 : 0) + (/google/i.test(v.name) ? 1 : 0);
+    const G = prefer === 'male' ? MALE : FEMALE, EG = prefer === 'male' ? /guy|davis|tony|andrew|brian|christopher|male/i : /jenny|aria|ava|emma|michelle|female/i;
+    const score = v => (/natural|neural/i.test(v.name) ? 10 : 0) + (/online/i.test(v.name) ? 4 : 0) + ((en ? EG : G).test(v.name) ? 5 : 0) + (/google/i.test(v.name) ? 3 : 0) + (v.localService ? 0 : 1);
     return pool.slice().sort((a, b) => score(b) - score(a))[0];
   }
+  // 朗讀前整理文字：拿掉表情符號、波浪號改逗號，避免機器念出奇怪的停頓
+  const clean = t => t.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '').replace(/[～~]/g, '，').replace(/…+/g, '，').replace(/\s+/g, ' ').trim();
   function say(line, cfg = {}) {
     stopVoice(); if (!voiceOn) return;
     const text = typeof line === 'string' ? line : line.text, audio = typeof line === 'object' && line.audio;
     const file = audio || (cfg.key && window.SITE && SITE.voiceFiles ? `assets/voice/${cfg.key}.mp3` : null);
-    if (file) { const a = current = new Audio(file); a.onerror = () => tts(text, cfg); a.play().catch(() => tts(text, cfg)); return; }
+    if (file) { const a = current = new Audio(file); a.playbackRate = 1.05; a.onerror = () => tts(text, cfg); a.play().catch(() => tts(text, cfg)); duck(); return; }
     tts(text, cfg);
   }
+  function duck() { if (ac && gains.water) gains.water.gain.setTargetAtTime(.08 * lv.water, ac.currentTime, .3); }    // 說話時壓低水聲
   function tts(text, cfg) {
     if (!('speechSynthesis' in window) || !voiceOn) return;
-    const en = cfg.lang === 'en';
-    const u = new SpeechSynthesisUtterance(text); u.lang = en ? 'en-US' : 'zh-TW';
-    const v = en ? (voices.filter(x => /^en/i.test(x.lang)).sort((a, b) => (/natural|online/i.test(b.name) ? 1 : 0) - (/natural|online/i.test(a.name) ? 1 : 0))[0] || null) : pickVoice(cfg.prefer); if (v) u.voice = v;
-    // 同一個聲音用音高區分男女
-    const sameVoice = v && !(cfg.prefer === 'female' ? FEMALE : MALE).test(v.name);
-    u.pitch = clamp((cfg.pitch || 1) * (sameVoice ? (cfg.prefer === 'male' ? .82 : 1.12) : 1), .1, 2);
-    u.rate = cfg.rate || 1; u.volume = 1;
-    if (gains.water) gains.water.gain.setTargetAtTime(.08 * lv.water, ac.currentTime, .3);   // 說話時壓低水聲
-    speechSynthesis.speak(u);
+    const en = cfg.lang === 'en', v = pickVoice(cfg.prefer, en);
+    const natural = v && /natural|neural|online/i.test(v.name), match = v && (cfg.prefer === 'male' ? MALE : FEMALE).test(v.name);
+    // 分句朗讀：每句一個 utterance，停頓更自然，也避開 Chrome 長句被截斷的問題
+    const parts = clean(text).split(/(?<=[。！？!?；])/).map(x => x.trim()).filter(Boolean);
+    // 語速：Google 中文預設偏慢 → 加快；自然語音本身節奏好 → 小幅加快。音高只做輕微調整（大幅變調會像機器人）
+    const baseRate = natural ? 1.08 : 1.2, rate = clamp(baseRate * (cfg.rate || 1), .8, 1.5);
+    const pitch = clamp(1 + ((cfg.pitch || 1) - 1) * .35 + (!match && v ? (cfg.prefer === 'male' ? -.12 : .06) : 0), .7, 1.3);
+    parts.forEach(p => { const u = new SpeechSynthesisUtterance(p); u.lang = en ? 'en-US' : 'zh-TW'; if (v) u.voice = v; u.rate = rate; u.pitch = pitch; u.volume = 1; speechSynthesis.speak(u); });
+    duck();
   }
   function stopVoice() { if (current) { current.pause(); current = null; } if ('speechSynthesis' in window) speechSynthesis.cancel(); }
 
