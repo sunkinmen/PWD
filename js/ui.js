@@ -86,10 +86,10 @@
     $('#hero-tagline').textContent = L.Z(z, 'tagline');
     $('#hero-sub').textContent = L.Z(z, 'subtitle');
     $('#hero-link').href = z.officialUrl;
-    $('#hero-visited').hidden = !visited.has(id);
+    $('#hero-visited').hidden = !visited.has(id); $('#hero-portal').hidden = !z.portal; $('#hero-link').hidden = !!z.portal;
     const ml = L.Z(z, 'metrics');
     $('#hero-cards').innerHTML = z.metrics.map((m, i) => `<div class="card">${ICONS.svg(m.ico || 'chart')}${m.trend ? `<em class="trend ${m.trend}" title="${t(m.trend === 'up' ? 'trendUp' : 'trendFlat')}">${m.trend === 'up' ? ICONS.svg('up') : '—'}</em>` : ''}<small>${Array.isArray(ml) && typeof ml[i] === 'string' ? ml[i] : m.label}</small><b>${m.value}</b><i>${m.unit}</i></div>`).join('')
-      + z.news.slice(0, 2).map(n => `<button class="card news" style="--tagc:${tagColor(n.tag, z)}" onclick="UI.openSheet()"><span class="thumb">${EM[id]}</span><small>${n.date}<em>${n.tag}</em></small><span>${n.title}</span></button>`).join('');
+      + z.news.slice(0, 2).map(n => `<button class="card news" style="--tagc:${tagColor(n.tag, z)}" onclick="${z.portal ? "UI.openPortal('notice')" : 'UI.openSheet()'}"><span class="thumb">${EM[id]}</span><small>${n.date}<em>${n.tag}</em></small><span>${n.title}</span></button>`).join('');
     $('#hero').classList.remove('open');
     const h = $('#hero'); h.classList.remove('swap'); void h.offsetWidth; h.classList.add('swap');
     World.flyTo(id);
@@ -138,7 +138,7 @@
     $('#sheet-title').textContent = L.Z(z, 'title');
     $('#sheet-services').innerHTML = z.services.map((s, i) => `<a href="${s.url}" target="_blank" rel="noopener" onclick="Extras.track('service_click',{zone:'${id}',service:'${s.name}'})"><span aria-hidden="true">${s.icon}</span>${Array.isArray(sn) && typeof sn[i] === 'string' ? sn[i] : s.name}</a>`).join('');
     $('#sheet-news').innerHTML = z.news.map(n => `<li style="--tagc:${tagColor(n.tag, z)}"><time>${n.date}<em>${n.tag}</em></time>${n.url ? `<a href="${n.url}" target="_blank" rel="noopener">${n.title}</a>` : n.title}</li>`).join('');
-    $('#sheet-link').href = z.officialUrl;
+    $('#sheet-link').href = z.officialUrl; $('#sheet-portal').hidden = !z.portal;
   }
   function openSheet(id) { id = id || current; fillSheet(id); lastFocus = document.activeElement; $('#sheet').hidden = false; blip(600); if (World.mode === 'explore') markVisited(id); setTimeout(() => $('#sheet .icon-btn').focus(), 30); track('sheet_open', { zone: id }); }
   function closeSheet() { $('#sheet').hidden = true; if (lastFocus) lastFocus.focus(); }
@@ -157,7 +157,7 @@
   function close(id) { const m = $('#' + id); if (!m || m.hidden) return; m.hidden = true; if (lastFocus && document.contains(lastFocus)) lastFocus.focus(); }
   document.addEventListener('keydown', e => {
     if (e.key !== 'Tab') return;
-    const m = [...document.querySelectorAll('.modal,#sheet,#tour,#celebrate')].find(x => !x.hidden); if (!m) return;
+    const m = [...document.querySelectorAll('.modal,#sheet,#tour,#celebrate,#portal')].find(x => !x.hidden); if (!m) return;
     const f = [...m.querySelectorAll('button,a[href],input,[tabindex="0"]')].filter(x => x.offsetParent !== null); if (!f.length) return;
     if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
     else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
@@ -193,8 +193,9 @@
     inp.oninput = () => renderSearch(inp.value.trim());
   }
   function renderSearch(q) {
-    const list = q ? window.SEARCH_INDEX.filter(s => (s.keywords + s.title + zone(s.zone).shortName + ZN(zone(s.zone))).toLowerCase().includes(q.toLowerCase())) : window.SEARCH_INDEX;
-    $('#search-results').innerHTML = (list.length ? list : window.SEARCH_INDEX).map(s => `<button onclick="UI.close('search');UI.goSearch('${s.zone}')">${EM[s.zone]}<span>${s.title}<small>${ZN(zone(s.zone))}</small></span></button>`).join('');
+    const base = window.SEARCH_INDEX.filter(s => !s.portal);
+    const list = q ? window.SEARCH_INDEX.filter(s => (s.keywords + s.title + zone(s.zone).shortName + ZN(zone(s.zone))).toLowerCase().includes(q.toLowerCase())).slice(0, 30) : base;
+    $('#search-results').innerHTML = (list.length ? list : base).map(s => `<button onclick="UI.close('search');${s.portal ? `UI.openPortal('${s.portal[0]}',${s.portal[1]})` : `UI.goSearch('${s.zone}')`}">${EM[s.zone]}<span>${s.title}<small>${ZN(zone(s.zone))}${s.portal ? '・線上申辦' : ''}</small></span></button>`).join('');
     if (q) track('search', { q });
   }
   function goSearch(id) { if (World.mode === 'explore') { select(id); setTimeout(() => openSheet(id), 1400); } else { select(id); setTimeout(() => openSheet(id), 900); } }
@@ -245,8 +246,8 @@
     addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') close('search'); return; }
       if (!started) { if (e.key === 'Enter' && e.target === document.body) start('explore'); return; }
-      if (e.key === 'Escape') { if (!$('#tour').hidden) return endTour(); if (!$('#celebrate').hidden) return closeCelebrate(); ['menu', 'search', 'tasks', 'a11y', 'stamps'].forEach(close); closeSheet(); return; }
-      if ([...document.querySelectorAll('.modal,#tour,#celebrate')].some(m => !m.hidden)) return;
+      if (e.key === 'Escape') { if (!$('#tour').hidden) return endTour(); if (!$('#portal').hidden) return closePortal(); if (!$('#celebrate').hidden) return closeCelebrate(); ['menu', 'search', 'tasks', 'a11y', 'stamps'].forEach(close); closeSheet(); return; }
+      if ([...document.querySelectorAll('.modal,#tour,#celebrate,#portal')].some(m => !m.hidden)) return;
       const onUI = e.target !== document.body && e.target.tagName !== 'CANVAS';
       if (World.mode === 'overview') {
         if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1);
@@ -454,7 +455,11 @@
   }
   function roundRect(x, a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
 
-  window.UI = { talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
+  /* ---------- 工務局完整資訊（pwd-portal.js）---------- */
+  function openPortal(tab, arg) { if (!window.Portal) return; if ($('#portal').hidden) { lastFocus = document.activeElement; $('#portal-emblem').innerHTML = EM.hub; blip(600); } Portal.open(tab || 'home', arg); }
+  function closePortal() { if (!window.Portal) return; Portal.close(); if (lastFocus && document.contains(lastFocus)) lastFocus.focus(); }
+
+  window.UI = { openPortal, closePortal, portalFilter: q => Portal.filter(q), talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
     share, openTasks, startTour, tourNext, endTour, toggleLang };
   boot();
 })();

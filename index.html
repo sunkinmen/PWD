@@ -96,6 +96,7 @@
       <div class="hero-actions">
         <button class="btn btn-primary" onclick="UI.enterZone()" data-i18n="enter">▶ 進入世界</button>
         <button class="btn btn-glass" onclick="UI.openSheet()" data-i18n="servicesNews">服務與公告</button>
+        <button class="btn btn-accent" id="hero-portal" onclick="UI.openPortal()" hidden><i data-ico="building"></i> <span data-i18n="portal">局網完整資訊</span></button>
         <button class="btn btn-ghost" onclick="UI.share()"><i data-ico="share"></i> <span data-i18n="share">分享</span></button>
         <a class="btn btn-ghost" id="hero-link" target="_blank" rel="noopener" data-i18n="website">官網 ↗</a>
       </div>
@@ -131,6 +132,7 @@
       <div class="services" id="sheet-services"></div>
       <h4 data-i18n="news">最新公告</h4>
       <ul class="news" id="sheet-news"></ul>
+      <button class="btn btn-accent btn-block" id="sheet-portal" onclick="UI.closeSheet();UI.openPortal()" hidden><i data-ico="building"></i> <span data-i18n="portalFull">開啟工務局完整資訊（公告・申辦・機關介紹）</span></button>
       <a class="btn btn-primary btn-block" id="sheet-link" target="_blank" rel="noopener" data-i18n="officialSite">前往官方網站 ↗</a>
     </div>
   </aside>
@@ -167,6 +169,7 @@
         <button onclick="UI.close('menu');UI.showHelp()" data-i18n="help">🎮 操作說明</button>
         <button onclick="UI.close('menu');UI.startTour(true)" data-i18n="tour">🧭 重看新手導覽</button>
         <button onclick="UI.close('menu');UI.openStamps()" data-i18n="stampsMenu">🏅 工務護照（集章）</button>
+        <button onclick="UI.close('menu');UI.openPortal()" data-i18n="portalMenu">🏛️ 工務局完整資訊</button>
         <a href="brand.html" target="_blank" data-i18n="brand">🎨 品牌設計規範</a>
         <a id="menu-official" target="_blank" rel="noopener" data-i18n="official">🏛️ 工務局官方網站 ↗</a>
       </div>
@@ -210,6 +213,20 @@
   </section>
   <noscript><div class="a11y-inner"><h1>臺北市政府工務局</h1><p>本網站以 3D 呈現工務局與新建工程處、水利工程處、公園路燈工程管理處、衛生下水道工程處、大地工程處。請開啟 JavaScript，或前往 <a href="https://pwd.gov.taipei/">工務局官方網站</a>。</p></div></noscript>
 
+  <!-- 工務局完整資訊（移植自 pwd.gov.taipei） -->
+  <div id="portal" role="dialog" aria-modal="true" aria-labelledby="portal-h" hidden>
+    <div class="portal-card">
+      <header class="portal-head">
+        <span class="portal-emblem" id="portal-emblem" aria-hidden="true"></span>
+        <div><small>Public Works Department · Taipei City Government</small><h3 id="portal-h">臺北市政府工務局</h3></div>
+        <button class="icon-btn" onclick="UI.closePortal()" data-i18n-aria="close"><i data-ico="close"></i></button>
+      </header>
+      <nav class="portal-tabs" id="portal-tabs" role="tablist" aria-label="分類"></nav>
+      <div class="portal-body" id="portal-body"></div>
+      <footer class="portal-foot" id="portal-foot"></footer>
+    </div>
+  </div>
+
   <!-- 工務護照（集章） -->
   <div class="modal" id="stamps" role="dialog" aria-modal="true" aria-labelledby="stamps-h" hidden>
     <div class="modal-card passport">
@@ -248,6 +265,7 @@
   <script src="js/world.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/icons.js"></script>
+  <script src="js/pwd-portal.js"></script>
   <script src="js/ui.js"></script>
 </body>
 </html>

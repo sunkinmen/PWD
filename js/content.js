@@ -14,7 +14,7 @@ window.SITE = {
   siteSubtitle: '走進道路、水利、公園、下水道與山坡地的五大工程世界',
   officialUrl: 'https://pwd.gov.taipei/',
   phone: '1999（外縣市請撥 02-2720-8889）',
-  address: '110204 臺北市信義區市府路 1 號 4 樓',
+  address: '110204 臺北市信義區市府路1號4樓西南區',
   siteUrl: 'https://sunkinmen.github.io/PWD/',   // 正式網址（分享連結用）
   // ── 內容自動更新：Google 試算表「檔案 → 共用 → 發布到網路 → CSV」的網址貼這裡，留空則只用本檔內容
   //    欄位：type(news/metric), zone(hub/nco/heo/pkl/sso/geo), date, tag, title, url, label, value, unit
@@ -43,18 +43,21 @@ window.ZONES = [
     officialUrl: 'https://pwd.gov.taipei/',
     metrics: [
       { ico: 'building', trend: 'flat', label: '所屬工程處', value: '5', unit: '處' },
-      { ico: 'chart', trend: 'up', label: '年度重大工程', value: '328', unit: '件' },
-      { ico: 'smile', trend: 'up', label: '市民滿意度', value: '94.6', unit: '%' }
+      { ico: 'stamp', trend: 'up', label: '累計獲獎', value: '770', unit: '座' },
+      { ico: 'tasks', trend: 'up', label: '線上申辦', value: '63', unit: '項' }
     ],
+    portal: true,   // 有「工務局完整資訊」（js/pwd-portal.js）
     services: [
-      { name: '施政成果與計畫', icon: '📘', url: 'https://pwd.gov.taipei/' },
-      { name: '道路挖掘管理中心', icon: '🚧', url: 'https://pwd.gov.taipei/' },
-      { name: '工程招標資訊', icon: '📄', url: 'https://pwd.gov.taipei/' },
-      { name: '1999 市民熱線', icon: '☎️', url: 'https://pwd.gov.taipei/' }
+      { name: '台北服務通 線上申辦', icon: '🧾', url: 'https://service.taipei/' },
+      { name: '道路挖掘資訊', icon: '🚧', url: 'https://pwd.gov.taipei/cp.aspx?n=BE5E181E4AB50623' },
+      { name: '聯合發包中心（招標）', icon: '📄', url: 'https://ubc.gov.taipei/' },
+      { name: '1999 陳情系統', icon: '☎️', url: 'https://1999.gov.taipei/' }
     ],
     news: [
-      { date: '2026-10-31', tag: '智慧工務', title: '工務局 3D 探索世界上線，一站走遍五大工程處' },
-      { date: '2026-10-25', tag: '永續淨零', title: '推動綠建材與低碳工法，五大工程處減碳成效突破年度目標' }
+      { date: '2026-11-01', tag: '公告', title: '公告本市115年度「北投6號行義公園整建工程」範圍內有（無）主墳墓遷葬事項', url: 'https://pwd.gov.taipei/News_Content.aspx?n=7DDF43AE70CEED14&sms=78D644F2755ACCAA&s=C14318731D66DA2A' },
+      { date: '2026-10-29', tag: '人事徵才', title: '資訊室資訊處理職系管理師職缺徵才公告', url: 'https://pwd.gov.taipei/News_Content.aspx?n=15DB5D0D2F59B520&sms=276202B31BFE11B9&s=C70AAF1231E19203' },
+      { date: '2026-10-21', tag: '公告', title: '艋舺公園廣場水舞表演時間', url: 'https://pwd.gov.taipei/News_Content.aspx?n=7DDF43AE70CEED14&sms=78D644F2755ACCAA&s=DEA9E6407F7F89D4' },
+      { date: '2026-10-14', tag: '活動', title: '2026生態博覽會將於11/7登場！', url: 'https://pwd.gov.taipei/News_Content.aspx?n=1E8085DB69373A96&sms=9D72E82EC16F3E64&s=D24C784D4B66823C' }
     ]
   },
   {
