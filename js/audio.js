@@ -207,7 +207,17 @@
     stopVoice(); if (!voiceOn) return;
     const text = typeof line === 'string' ? line : line.text, audio = typeof line === 'object' && line.audio;
     const file = audio || (cfg.key && window.SITE && SITE.voiceFiles ? `assets/voice/${cfg.key}.mp3` : null);
-    if (file) { const a = current = new Audio(file); a.playbackRate = 1.05; a.onerror = () => tts(text, cfg); a.play().catch(() => tts(text, cfg)); duck(); return; }
+    if (file) {
+      const a = current = new Audio(file); a.playbackRate = 1.05; a.preservesPitch = true;
+      a.onerror = () => { if (current === a) tts(text, cfg); };
+      a.play().catch(e => {
+        // 瀏覽器尚未允許播放（還沒點過畫面）：等下一次點擊／按鍵再播真人錄音，不改用機器語音
+        if (e && e.name === 'NotAllowedError') { const go = () => { removeEventListener('pointerdown', go, true); removeEventListener('keydown', go, true); if (current === a) a.play().catch(() => { }); };
+          addEventListener('pointerdown', go, true); addEventListener('keydown', go, true); }
+        else if (current === a) tts(text, cfg);
+      });
+      duck(); return;
+    }
     tts(text, cfg);
   }
   function duck() { if (ac && gains.water) gains.water.gain.setTargetAtTime(.08 * lv.water, ac.currentTime, .3); }    // 說話時壓低水聲

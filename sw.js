@@ -1,7 +1,7 @@
 /* sw.js ── 離線快取（PWA）
  * 策略：網頁／程式／內容「網路優先」（上傳新版自動生效，離線時用快取）；圖片音檔「快取優先」（第二次開啟秒開）
  * 更換大量圖片後，把 VERSION 改個數字即可清掉舊圖快取 */
-const VERSION = 'pwd3d-v6';
+const VERSION = 'pwd3d-v7';
 const CORE = [
   './', './index.html', './css/style.css', './manifest.json',
   './js/vendor/three.min.js', './js/content.js', './js/content-en.js', './js/i18n.js', './js/emblems.js',
@@ -19,6 +19,6 @@ self.addEventListener('fetch', e => {
   if (isMedia || url.hostname.includes('gstatic')) {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => { const cp = res.clone(); caches.open(VERSION).then(c => c.put(req, cp)); return res; })));
   } else {
-    e.respondWith(fetch(req).then(res => { const cp = res.clone(); caches.open(VERSION).then(c => c.put(req, cp)); return res; }).catch(() => caches.match(req).then(h => h || caches.match('./index.html'))));
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then(res => { const cp = res.clone(); caches.open(VERSION).then(c => c.put(req, cp)); return res; }).catch(() => caches.match(req).then(h => h || caches.match('./index.html'))));
   }
 });
