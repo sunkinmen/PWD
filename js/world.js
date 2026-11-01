@@ -17,7 +17,7 @@
     hitboxes: [],
     colliders: [],
     zones: {},
-    listeners: { zoneClick: [], proximity: [], frame: [], modeChange: [], npc: [], splash: [] },
+    listeners: { zoneClick: [], proximity: [], frame: [], modeChange: [], npc: [], splash: [], ride: [] },
     move: { x: 0, y: 0 },     // 手機搖桿輸入
     keys: {},
     riverSamples: [],
@@ -613,6 +613,7 @@
     const tip = M(sph(.35, 1), '#ff8fa3', { y: ty + .2, parent: t101, ol: 0, mat: new T.MeshBasicMaterial({ color: '#ff9fb1' }) });
     W.updaters.push(t => { tip.material.color.setHSL(.97, .9, .72 + Math.sin(t * 3) * .12); });
     W.colliders.push({ x: 24, z: -4, r: 4.8 });
+    build101Extras(g, t101);
 
     // 市府前彩虹步道（對應實景）
     const rb = G(g, 0, 0, 17);
@@ -972,6 +973,7 @@
   W.npcs = [];
   const SKIN = '#ffe2cc', HAIR = '#4a3428';
   const OUTFIT = {
+    obs:   { g: 'f', shirt: '#26355e', pants: '#26355e', jacket: true, scarf: '#e04a5a', cap: '#26355e', hair: '#1f1d22', style: 'pony' },
     hub:   { g: 'f', shirt: '#cfe3f7', pants: '#33476e', vest: '#2f4570', hair: '#3a2a22', style: 'pony' },
     road:  { g: 'm', shirt: '#9aa3b2', pants: '#4d5b85', vest: '#ff8a3d', stripe: '#d8dde6', hat: '#ffcf3f', hair: '#3a2a22' },
     water: { g: 'f', shirt: '#2f4f86', pants: '#2f4f86', jacket: true, stripe: '#d8dde6', hat: '#f4f6fa', boots: '#ffd166', hair: '#5a3c2c', style: 'pony' },
@@ -1054,6 +1056,10 @@
       M(box(.09, .2, .7), o.hat, { y: .55, s: [1, 1, 1], parent: head, ol: .015 });
       M(cyl(.52, .53, .05, 28), o.hat, { y: .13, z: .07, s: [1, 1, 1.12], parent: head, ol: .02 });
       M(box(.82, .04, .04), '#3d4258', { y: .1, z: .0, parent: head, ol: 0 }); }
+    if (o.cap) { M(cyl(.3, .34, .2, 18), o.cap, { y: .42, z: -.02, rx: -.15, parent: head, ol: .015 }); M(cyl(.345, .345, .05, 18), '#e04a5a', { y: .36, z: -.01, rx: -.15, parent: head, ol: 0 });
+      M(box(.3, .03, .16), o.cap, { y: .33, z: .3, rx: .25, parent: head, ol: .01 }); }
+    if (o.scarf) { M(new T.TorusGeometry(.2, .055, 6, 16), o.scarf, { y: 1.47, rx: Math.PI / 2, parent: body, ol: .01 }); M(new T.ConeGeometry(.1, .2, 3), o.scarf, { y: 1.32, z: .27, rx: Math.PI, parent: body, ol: .01 });
+      [0, 1, 2].forEach(i => M(sph(.022, 0), '#f5cf6a', { y: 1.28 - i * .12, z: .315, parent: body, ol: 0 })); M(box(.12, .07, .02), '#ffffff', { x: .14, y: 1.3, z: .3, parent: body, ol: 0 }); }
     if (o.lamp) { M(cyl(.09, .09, .1, 12), '#3d4258', { y: .3, z: .43, rx: Math.PI / 2 - .2, parent: head, ol: .01 });
       M(cyl(.065, .065, .02, 12), '#fff6c9', { y: .31, z: .49, rx: Math.PI / 2 - .2, parent: head, ol: 0, mat: new T.MeshBasicMaterial({ color: '#fff6c9' }) }); }
     if (o.straw) { M(cyl(.66, .66, .04, 28), '#e8c98a', { y: .24, parent: head, ol: .02 }); M(cyl(.3, .36, .28, 20), '#e8c98a', { y: .38, parent: head, ol: .02 });
@@ -1101,11 +1107,12 @@
       else if (n.outfit === 'god') { pos = new V3(0, 30, -96); radius = 15; }
       else {
         let x, z;
-        if (n.zone === 'hub') { x = 7; z = 21; }
+        if (n.pos) { [x, z] = n.pos; }
+        else if (n.zone === 'hub') { x = 7; z = 21; }
         else { const [zx, zz] = zoneById(n.zone).pos, L = Math.hypot(zx, zz), ux = zx / L, uz = zz / L;
           const cands = [[1, 10], [-1, 10], [1, 13], [-1, 13], [0, 14]].map(([s, d]) => [zx - ux * d + uz * 3.6 * s, zz - uz * d - ux * 3.6 * s]);
           [x, z] = cands.find(c => !W.colliders.some(k => Math.hypot(c[0] - k.x, c[1] - k.z) < k.r + 1.4)) || cands[4]; }
-        obj = makeNPC(n.outfit); obj.position.set(x, .1 + hill(x, z), z); obj.rotation.y = Math.atan2(-x, -z) + Math.PI;
+        obj = makeNPC(n.outfit); obj.position.set(x, .1 + hill(x, z), z); obj.rotation.y = n.yaw ?? (Math.atan2(-x, -z) + Math.PI);
         pos = new V3(x, 0, z);
         W.colliders.push({ x, z, r: .7 });
       }
@@ -1618,7 +1625,7 @@
     const ca = new T.Color('#ffe08a'), cb = new T.Color('#b9f5c8');
     for (let i = 0; i < N; i++) { life[i] = 0; vel.push(new V3()); const c = i % 3 ? ca : cb; col.set([c.r, c.g, c.b], i * 3); }
     geo.setAttribute('position', new T.BufferAttribute(p, 3)); geo.setAttribute('color', new T.BufferAttribute(col, 3));
-    const pts = new T.Points(geo, new T.PointsMaterial({ size: .45, map: dotTex(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    const pts = new T.Points(geo, new T.PointsMaterial({ size: .45, map: fwDotTex(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
     pts.frustumCulled = false; W.scene.add(pts);
     let acc = 0, idx = 0;
     return (origin, dt, strong) => {
@@ -2200,6 +2207,8 @@
       }
       const dx = e.clientX - prev.clientX, dy = e.clientY - prev.clientY; moved += Math.abs(dx) + Math.abs(dy);
       if (W.mode === 'overview') { cam.az -= dx * .005; cam.el = T.MathUtils.clamp(cam.el + dy * .003, .08, 1.25); cam.goal = null; }
+      else if (W.mode === 'deck') { W.deck.az -= dx * .004; W.deck.pitch = T.MathUtils.clamp(W.deck.pitch - dy * .003, -.9, .4); W.deck.lastDrag = performance.now(); }
+      else if (W.mode === 'ride') { }
       else { cam.yaw -= dx * .0045; cam.pitch = T.MathUtils.clamp(cam.pitch - dy * .0035, -1.0, .9); }
     });
     const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (down && moved < 8 && e.type === 'pointerup') click(e); down = null; };
@@ -2326,6 +2335,7 @@
     W.flowMats.forEach(m => (m.uniforms.uTime.value = t));
     if (W.mode === 'debug') { if (W.follow) { const o = W.follow, wp = o.getWorldPosition(new V3()), q = o.getWorldQuaternion(new T.Quaternion());
         W.camera.position.copy(wp).add(new V3(4.5, 2.6, 2.5).applyQuaternion(q)); W.camera.lookAt(wp.clone().add(new V3(0, 1.2, 0))); } }
+    else if (W.mode === 'ride') updateRide(dt); else if (W.mode === 'deck') updateDeck(dt);
     else if (W.mode === 'explore') updateExplore(dt); else updateOverview(dt, t);
     applyViewOffset(dt);
     if (PP.on) {
@@ -2355,9 +2365,172 @@
     return out;
   }
 
+  /* =====================================================================
+   * 臺北101：一樓觀景台兌換處、89F 觀景台、螺旋上升電梯運鏡、3D 煙火（最後 3 秒拼出「工務局❤」）
+   * ===================================================================== */
+  const T101 = new V3(24, 0, -4), DECK_Y = 49, DECK_R = 6.8;
+  function build101Extras(g, t101) {
+    // 南側入口：金色大門＋雨庇
+    M(box(3, 3.2, .3), '#c9a65a', { x: 24, y: 1.6, z: -.45, parent: g, ol: .03 });
+    M(box(2.4, 2.8, .32), '#26355e', { x: 24, y: 1.4, z: -.4, parent: g, ol: 0 });
+    M(box(4.6, .25, 2), '#e8f4f0', { x: 24, y: 3.6, z: .5, parent: g, ol: .03 });
+    // 兌換處櫃台（木紋＋深藍面板）
+    const bx = 24, bz = 2.2;
+    M(box(3.6, 1.1, .9), '#26355e', { x: bx, y: .55, z: bz, parent: g, ol: .03 });
+    M(box(3.8, .1, 1.1), '#d9b77a', { x: bx, y: 1.15, z: bz, parent: g, ol: .02 });
+    [-1, 1].forEach(s => M(cyl(.07, .07, 2.6, 8), '#c9a65a', { x: bx + s * 1.8, y: 1.3, z: bz + .3, parent: g, ol: .02 }));
+    const sign = new T.Mesh(new T.PlaneGeometry(4.2, 1.3), new T.MeshBasicMaterial({ map: textTex(840, 260, (x, w, h) => {
+      const gr = x.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#26355e'); gr.addColorStop(1, '#3d5592'); x.fillStyle = gr; x.beginPath(); x.roundRect(4, 4, w - 8, h - 8, 36); x.fill();
+      x.strokeStyle = '#f5cf6a'; x.lineWidth = 8; x.stroke();
+      x.fillStyle = '#fff'; x.textAlign = 'center'; x.font = `900 76px ${FONT_TC}`; x.fillText('101 觀景台兌換處', w / 2, 112);
+      x.fillStyle = '#f5cf6a'; x.font = `700 38px ${FONT_TC}`; x.fillText('集滿 6 枚工務章 ▸ 免費登頂 89F', w / 2, 196); }), transparent: true }));
+    sign.position.set(bx, 3.0, bz + .32); g.add(sign); if (W.litSigns) W.litSigns.push(sign);
+    // 小立牌：門票圖
+    const tk = new T.Mesh(new T.PlaneGeometry(1.5, .75), new T.MeshBasicMaterial({ color: '#ffffff' }));
+    tk.position.set(bx + 1.3, 1.62, bz + .1); tk.rotation.x = -.35; g.add(tk);
+    new T.TextureLoader().load('assets/101/ticket.jpg', t => { t.colorSpace = T.SRGBColorSpace; tk.material.map = t; tk.material.needsUpdate = true; });
+    W.colliders.push({ x: bx, z: bz, r: 2.1 });
+    // 89F 觀景平台環（從外面看是一圈玻璃露台）
+    const ring = new T.Mesh(new T.CylinderGeometry(5.6, 5.6, .25, 32), toon('#e8f4f0')); ring.position.y = DECK_Y - 2.2; t101.add(ring); outline(ring, .04);
+    const rail = new T.Mesh(new T.CylinderGeometry(5.6, 5.6, 1.1, 32, 1, true), new T.MeshBasicMaterial({ color: '#bfeaf2', transparent: true, opacity: .28, side: T.DoubleSide, depthWrite: false }));
+    rail.position.y = DECK_Y - 1.6; t101.add(rail);
+  }
+
+  /* ---------- 電梯螺旋運鏡 ---------- */
+  W.ride = null; W.deck = { az: 0, pitch: -.22, lastDrag: 0 };
+  function emitRide(phase, extra) { W.listeners.ride.forEach(f => f(Object.assign({ phase }, extra))); }
+  function startRide(dir) {
+    if (W.ride) return;
+    const a0 = dir > 0 ? Math.atan2(cam.pos.x - T101.x, cam.pos.z - T101.z) : W.deck.az;
+    W.prevMode = dir > 0 ? W.mode : W.prevMode; W._npc && (W._npc = null, W.listeners.npc.forEach(f => f(null)));
+    // 上升終點＝面向世界中心（從 101 看向市政府與五大工程處）；圈數至少 2 圈
+    const face = Math.atan2(-10 - T101.x, 6 - T101.z);
+    let a1 = dir > 0 ? face : a0 + Math.PI * 4.5; if (dir > 0) { while (a1 < a0 + Math.PI * 4) a1 += Math.PI * 2; }
+    W.ride = { dir, t0: performance.now(), dur: 14000, a0, a1 };
+    W.mode = 'ride'; if (W.avatar) W.avatar.visible = false;
+    emitRide(dir > 0 ? 'up' : 'down');
+  }
+  function updateRide(dt) {
+    const r = W.ride, k = Math.min(1, (performance.now() - r.t0) / r.dur), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    const u = r.dir > 0 ? e : 1 - e;                      // u：0 = 地面，1 = 頂樓
+    const ang = r.a0 + e * (r.a1 - r.a0);
+    const rad = 17 - u * (17 - DECK_R), h = 3 + u * (DECK_Y - 3);
+    W.camera.position.set(T101.x + Math.sin(ang) * rad, h, T101.z + Math.cos(ang) * rad);
+    // 前段看著大樓（貼著帷幕上升），接近頂樓時轉向窗外
+    const out = T.MathUtils.smoothstep(u, .82, 1);
+    const inPt = new V3(T101.x, h + 1.5, T101.z), outPt = new V3(T101.x + Math.sin(ang) * 60, h - 24, T101.z + Math.cos(ang) * 60);
+    W.camera.lookAt(inPt.lerp(outPt, out));
+    emitRide('progress', { u, floor: Math.max(1, Math.round(u * 89)), dir: r.dir });
+    if (k >= 1) {
+      W.ride = null;
+      if (r.dir > 0) { W.mode = 'deck'; W.deck.az = ang; W.deck.pitch = -.4; W.deck.lastDrag = performance.now() + 4000; emitRide('deck'); }
+      else { W.mode = 'explore'; cam.pos.set(T101.x, 2.4, 7.5); cam.yaw = 0; cam.pitch = -.04; cam.fp = null; cam.vel.set(0, 0, 0); stopFireworks(); emitRide('ground'); }
+    }
+  }
+  function updateDeck(dt) {
+    const d = W.deck; if (performance.now() - d.lastDrag > 2500 && !FW.active) d.az += dt * .04;
+    if (FW.active && performance.now() - d.lastDrag > 1500) d.pitch += (-.06 - d.pitch) * Math.min(1, dt * 1.5);   // 放煙火時抬頭看天空
+    const px = T101.x + Math.sin(d.az) * DECK_R, pz = T101.z + Math.cos(d.az) * DECK_R;
+    W.camera.position.set(px, DECK_Y, pz);
+    W.camera.lookAt(px + Math.sin(d.az) * 10, DECK_Y + d.pitch * 10, pz + Math.cos(d.az) * 10);
+  }
+
+  /* ---------- 3D 煙火 ---------- */
+  const FW = { max: 9000, pts: null, n: 0, active: false, t0: 0, dur: 15, nextLaunch: 0, textDone: false };
+  function fwDotTex() { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.25, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new T.CanvasTexture(c); }
+  function initFW() {
+    if (FW.pts) return;
+    const geo = new T.BufferGeometry(), N = FW.max;
+    FW.pos = new Float32Array(N * 3); FW.col = new Float32Array(N * 3); FW.vel = new Float32Array(N * 3); FW.life = new Float32Array(N); FW.max0 = new Float32Array(N);
+    FW.tgt = new Float32Array(N * 3); FW.kind = new Uint8Array(N); FW.base = new Float32Array(N * 3);
+    geo.setAttribute('position', new T.BufferAttribute(FW.pos, 3)); geo.setAttribute('color', new T.BufferAttribute(FW.col, 3));
+    FW.pts = new T.Points(geo, new T.PointsMaterial({ size: 1.1, map: fwDotTex(), vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, sizeAttenuation: true }));
+    FW.pts.frustumCulled = false; W.scene.add(FW.pts);
+  }
+  const PAL = ['#ff5a7a', '#ffd166', '#7ae0ff', '#a98bff', '#7cf0a0', '#ff9f43', '#ffffff', '#ff7ad9'];
+  function spawn(p, v, c, life, kind = 0) {
+    const i = FW.n++ % FW.max; FW.pos.set([p.x, p.y, p.z], i * 3); FW.vel.set([v.x, v.y, v.z], i * 3);
+    FW.base.set([c.r, c.g, c.b], i * 3); FW.col.set([c.r, c.g, c.b], i * 3); FW.life[i] = life; FW.max0[i] = life; FW.kind[i] = kind; return i;
+  }
+  function launch(type) {
+    const cp = W.camera.position, fwd = new V3(); W.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+    const right = new V3(-fwd.z, 0, fwd.x), d = 55 + Math.random() * 60, side = (Math.random() - .5) * d * 1.3;
+    const o = new V3(cp.x + fwd.x * d + right.x * side, 2, cp.z + fwd.z * d + right.z * side), hgt = 38 + Math.random() * 34;
+    const c = new T.Color(PAL[Math.random() * PAL.length | 0]), c2 = new T.Color(PAL[Math.random() * PAL.length | 0]);
+    FW.rockets.push({ p: o, vy: 34 + Math.random() * 8, top: hgt, c, c2, type: type ?? (Math.random() * 4 | 0) });
+    window.Sound && Sound.whistle && Sound.whistle();
+  }
+  function burst(r) {
+    const n = r.type === 3 ? 260 : 180, sp = 13 + Math.random() * 6;
+    for (let k = 0; k < n; k++) {
+      const u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+      let dir = new V3(s * Math.cos(th), u, s * Math.sin(th));
+      if (r.type === 1) { dir.y *= .25; dir.normalize(); }                           // 土星環
+      const m = r.type === 2 ? (k % 2 ? 1 : .55) : (.85 + Math.random() * .3);      // 雙層菊
+      spawn(r.p, dir.multiplyScalar(sp * m), k % 3 === 0 ? r.c2 : r.c, 1.6 + Math.random() * .9, r.type === 3 ? 2 : 1);
+    }
+    window.Sound && Sound.boom && Sound.boom(r.p.distanceTo(W.camera.position));
+  }
+  /* 最後 3 秒：粒子飛到「工務局❤」字形位置（面向鏡頭） */
+  function textBurst() {
+    const c = document.createElement('canvas'), W0 = 420, H0 = 120; c.width = W0; c.height = H0; const x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.font = `900 92px ${FONT_TC}`; x.textBaseline = 'middle'; x.fillText('工務局', 8, 64);
+    x.fillStyle = '#f00'; x.beginPath(); const hx = 345, hy = 62, s = 40;   // 愛心
+    x.moveTo(hx, hy + s * .9); x.bezierCurveTo(hx - s * 1.5, hy - s * .1, hx - s * .7, hy - s * 1.2, hx, hy - s * .45); x.bezierCurveTo(hx + s * .7, hy - s * 1.2, hx + s * 1.5, hy - s * .1, hx, hy + s * .9); x.fill();
+    const img = x.getImageData(0, 0, W0, H0).data, pts = [];
+    for (let yy = 0; yy < H0; yy += 2) for (let xx = 0; xx < W0; xx += 2) { const i = (yy * W0 + xx) * 4; if (img[i + 3] > 128) pts.push([xx, yy, img[i + 1] < 80]); }
+    const camP = W.camera.position, fwd = new V3(); W.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+    const center = camP.clone().addScaledVector(fwd, 95); center.y = camP.y + 3;
+    const right = new V3().crossVectors(fwd, new V3(0, 1, 0)).normalize(), sc = .2;
+    const gold = new T.Color('#ffd66b'), red = new T.Color('#ff0a1e');
+    pts.forEach(([px, py, isRed]) => {
+      const tgt = center.clone().addScaledVector(right, (px - W0 / 2) * sc).add(new V3(0, (H0 / 2 - py) * sc, 0));
+      const i = spawn(center, new V3(), isRed ? red : gold, 3.2, 3); FW.tgt.set([tgt.x, tgt.y, tgt.z], i * 3);
+    });
+    window.Sound && Sound.boom && Sound.boom(40); setTimeout(() => window.Sound && Sound.boom && Sound.boom(40), 180);
+  }
+  function startFireworks() {
+    initFW(); FW.rockets = []; FW.active = true; FW.t0 = W.clock.elapsedTime; FW.nextLaunch = 0; FW.textDone = false;
+    W.listeners.ride.forEach(f => f({ phase: 'fw-start' }));
+  }
+  function stopFireworks() { if (!FW.pts) return; FW.active = false; FW.rockets = []; FW.life.fill(0); FW.col.fill(0); FW.pts.geometry.attributes.color.needsUpdate = true; }
+  function updateFW(dt) {
+    if (!FW.pts) return;
+    const t = W.clock.elapsedTime - FW.t0;
+    if (FW.active) {
+      if (t < FW.dur - 3 && t >= FW.nextLaunch) { launch(); if (Math.random() < .45) launch(); FW.nextLaunch = t + .35 + Math.random() * .45; }
+      if (t >= FW.dur - 3 && !FW.textDone) { FW.textDone = true; textBurst(); }
+      if (t >= FW.dur) { FW.active = false; W.listeners.ride.forEach(f => f({ phase: 'fw-end' })); }
+    }
+    FW.rockets = (FW.rockets || []).filter(r => { r.p.y += r.vy * dt; r.vy -= 6 * dt;
+      spawn(r.p, new V3((Math.random() - .5) * 1.5, -2, (Math.random() - .5) * 1.5), new T.Color('#ffd9a0'), .45, 1);
+      if (r.p.y >= r.top || r.vy < 4) { burst(r); return false; } return true; });
+    const P = FW.pos, V = FW.vel, C = FW.col, B = FW.base, L = FW.life, M0 = FW.max0, K = FW.kind, TG = FW.tgt;
+    for (let i = 0; i < FW.max; i++) {
+      if (L[i] <= 0) continue;
+      L[i] -= dt; const j = i * 3, f = Math.max(0, L[i] / M0[i]);
+      if (K[i] === 3) {   // 字形：彈向目標後停住閃爍
+        const age = M0[i] - L[i], e = Math.min(1, age / .7);
+        P[j] += (TG[j] - P[j]) * Math.min(1, dt * 7 * (.3 + e)); P[j + 1] += (TG[j + 1] - P[j + 1]) * Math.min(1, dt * 7 * (.3 + e)); P[j + 2] += (TG[j + 2] - P[j + 2]) * Math.min(1, dt * 7 * (.3 + e));
+        const tw = .75 + Math.sin((i * 13.7) + W.clock.elapsedTime * 18) * .25, fade = L[i] < .5 ? L[i] / .5 : 1;
+        C[j] = B[j] * tw * fade; C[j + 1] = B[j + 1] * tw * fade; C[j + 2] = B[j + 2] * tw * fade; continue;
+      }
+      V[j + 1] -= 9 * dt; const drag = Math.pow(.35, dt); V[j] *= drag; V[j + 1] *= drag; V[j + 2] *= drag;
+      P[j] += V[j] * dt; P[j + 1] += V[j + 1] * dt; P[j + 2] += V[j + 2] * dt;
+      const tw = K[i] === 2 && f < .5 ? (Math.random() < .5 ? 1.4 : .2) : 1;           // 閃爍型
+      C[j] = B[j] * f * tw; C[j + 1] = B[j + 1] * f * tw; C[j + 2] = B[j + 2] * f * tw;
+      if (L[i] <= 0) { C[j] = C[j + 1] = C[j + 2] = 0; }
+    }
+    FW.pts.geometry.attributes.position.needsUpdate = true; FW.pts.geometry.attributes.color.needsUpdate = true;
+  }
+  W.updaters.push((t, dt) => updateFW(dt));
+
   window.World = {
     init, flyTo, setMode, setSeason, setQuality, projectZones, overviewHome,
     setViewShift: v => { viewShiftGoal = v; },
+    startRide, startFireworks, stopFireworks, get fireworksOn() { return FW.active; }, get fwTime() { return W.clock.elapsedTime - FW.t0; },
+    get boothPos() { return new V3(24, 0, 2.2); },
     setTime: k => setTime(k), get timeMode() { return W.todMode; }, get night() { return W.nightLevel || 0; },
     setView: v => { W.view = v; if (v === 'third' && W.avatar) { W.avatar.rotation.y = cam.yaw + Math.PI; W.camera.position.set(cam.pos.x + Math.sin(cam.yaw) * 6.5, cam.pos.y + 3, cam.pos.z + Math.cos(cam.yaw) * 6.5); } },
     get view() { return W.view || 'first'; },

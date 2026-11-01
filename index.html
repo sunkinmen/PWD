@@ -116,6 +116,7 @@
         <div class="vn-box">
           <div class="npc-head"><b id="npc-name"></b><small id="npc-role"></small></div>
           <p id="npc-text" aria-live="polite"></p>
+          <div class="npc-actions" id="npc-actions" hidden></div>
           <span class="npc-next"><span data-i18n="npcNext">點我或按 E 繼續</span> <i class="vn-arrow">▼</i></span>
         </div>
       </div>
@@ -237,9 +238,10 @@
       <div class="modal-head"><h3 id="stamps-h" data-i18n="stampsTitle">臺北工務護照</h3><button class="icon-btn" onclick="UI.close('stamps')" data-i18n-aria="close"><i data-ico="close"></i></button></div>
       <p class="fine" data-i18n="stampsHint">走進每個工程世界、靠近處本部就能蓋章。六枚集滿，山神爺爺會親自祝福你！</p>
       <div class="stamp-grid" id="stamp-grid"></div>
-      <div class="cert-row" id="cert-row" hidden>
-        <input id="cert-name" maxlength="16" data-i18n-ph="certPh" aria-label="姓名">
-        <button class="btn btn-primary" onclick="UI.downloadCert()"><i data-ico="download"></i> <span data-i18n="certDl">下載紀念卡</span></button>
+      <div class="reward-row" id="reward-row">
+        <img src="assets/101/ticket.jpg" alt="">
+        <div><b data-i18n="rewardTitle">集滿六枚：免費登上 101 觀景台</b><small id="reward-sub"></small></div>
+        <button class="btn btn-primary" onclick="UI.close('stamps');UI.goBooth()"><i data-ico="map"></i> <span data-i18n="goBooth">前往兌換處</span></button>
       </div>
     </div>
   </div>
@@ -254,9 +256,38 @@
       <img src="assets/npc/god-happy.jpg" alt="" class="cele-god">
       <h3 id="cele-h" data-i18n="celeTitle">恭喜集滿六枚工務章！</h3>
       <p data-i18n="celeText">山神爺爺：「你走遍了道路、河川、公園、下水道和山林，臺北因為有你這樣關心市政的人，會更美好。老夫在此賜福！」</p>
-      <div class="tour-actions"><button class="btn btn-ghost" onclick="UI.closeCelebrate()" data-i18n="later">稍後</button><button class="btn btn-primary" onclick="UI.closeCelebrate();UI.openStamps()" data-i18n="getCert">領取紀念卡</button></div>
+      <div class="tour-actions"><button class="btn btn-ghost" onclick="UI.closeCelebrate()" data-i18n="later">稍後</button><button class="btn btn-primary" onclick="UI.closeCelebrate();UI.goBooth()" data-i18n="getCert">前往 101 兌換門票</button></div>
     </div>
   </div>
+
+  <!-- 101 觀景台門票 -->
+  <div id="ticket" role="dialog" aria-modal="true" aria-labelledby="ticket-h" hidden>
+    <div class="ticket-wrap">
+      <div class="ticket-card"><img src="assets/101/ticket.jpg" alt="">
+        <div class="ticket-stub"><small>TAIPEI 101 OBSERVATORY</small><b id="ticket-h">89F</b><span data-i18n="ticketAdmit">觀景台 單人入場</span><em id="ticket-name"></em><time id="ticket-date"></time>
+          <div class="ticket-stamps" id="ticket-stamps"></div></div>
+        <div class="ticket-title"><span data-i18n="ticketTitle">臺北工務探索世界</span><b data-i18n="ticketSub">觀景台門票</b></div>
+      </div>
+      <button class="btn btn-primary btn-lg" onclick="UI.boardElevator()"><span data-i18n="board">搭乘電梯上 89F</span> ▲</button>
+    </div>
+  </div>
+
+  <!-- 電梯面板 -->
+  <div id="ride-ui" hidden aria-live="polite">
+    <div class="lift-panel"><small data-i18n="liftLabel">觀景台直達電梯</small><b><span id="lift-floor">1</span><i>F</i></b><span class="lift-arrow" id="lift-arrow">▲</span>
+      <div class="lift-bar"><i id="lift-fill"></i></div><em data-i18n="liftSpeed">每分鐘 1010 公尺</em></div>
+  </div>
+
+  <!-- 89F 觀景台 -->
+  <div id="deck-ui" hidden>
+    <div class="deck-title"><small>TAIPEI 101 OBSERVATORY</small><b data-i18n="deckTitle">89F 觀景台</b><span data-i18n="deckHint">拖曳畫面環顧整個工務世界</span></div>
+    <div class="deck-actions">
+      <button class="btn btn-glass" onclick="UI.descend()"><span data-i18n="descend">搭電梯回地面</span> ▼</button>
+      <label class="deck-night"><input type="checkbox" id="deck-night" onchange="UI.deckNight(this.checked)"><span data-i18n="nightMode">🌙 夜間模式</span></label>
+      <button class="btn btn-primary" id="btn-fw" onclick="UI.fireworks()"><span data-i18n="fireworks">🎆 施放煙火</span></button>
+    </div>
+  </div>
+  <div id="countdown" aria-live="assertive" hidden><b id="cd-num">3</b></div>
 
   <div id="toast" role="status" aria-live="polite"></div>
 

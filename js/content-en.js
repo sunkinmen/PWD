@@ -45,5 +45,9 @@ window.NPCS_EN = {
   turtle: { name: 'Turtle Engineer', role: 'Sewer patroller', greet: ['Hi hi! Just finished patrolling the pipes — all clear!'],
     lines: ['Please don’t pour oil down the sink — the pipes get clogged!'] },
   god: { name: 'Mountain Elder', role: 'Guardian of the slopes', greet: ['Ho ho ho, welcome to the mountain, young one.'],
-    lines: ['Trees hold the soil; care for the forest and it will care for you.', 'Stay away from streams in the rain, and walk around fallen rocks.'] }
+    lines: ['Trees hold the soil; care for the forest and it will care for you.', 'Stay away from streams in the rain, and walk around fallen rocks.'] },
+  'obs-1': { name: 'Yun', role: 'Taipei 101 Observatory desk', greet: ['Welcome to Taipei 101! Collect all six stamps for a free 89F observatory ticket!'],
+    ready: 'Wow, all six stamps! Congratulations — here is your observatory ticket. The elevator is right behind me!',
+    notYet: n => `You still need ${n} more stamp${n > 1 ? 's' : ''}. Visit the engineering offices and come back!`,
+    lines: ['The observatory is on 89F — the elevator goes 1,010 m per minute!', 'Up top you can launch fireworks. They look even better at night!'] }
 };

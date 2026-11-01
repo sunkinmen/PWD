@@ -148,3 +148,11 @@ pwd3d/
   - 男：米白漁夫帽、燕麥色亞麻襯衫＋橄欖綠外套、反摺卡其寬褲、棕色短靴、墨綠大背包（睡墊捲＋水壺）、斜背相機、手拿地圖。
   - 女：草編寬簷帽＋淺藍緞帶、白亞麻上衣＋芥末黃針織開襟衫、鼠尾草綠長裙、米色帆布鞋、焦糖色小皮背包、手拿旅遊小冊、黑長髮。
 - 修改：`world.js` → `OUTFIT.player / playerF`（顏色與配件開關：coat、skirt、bucket、straw+ribbon、pack+small/bottle、camera、map、booklet）。
+
+## 臺北 101 觀景台（集章獎勵）
+- 集滿六枚工務章 → 到 **101 一樓「觀景台兌換處」** 找服務員小雲（`content.js` NPC `obs-1`，`special: 'ticket'`）兌換門票（工務護照、集滿慶祝視窗都有「前往兌換處」按鈕，會直接傳送過去）。
+- 兌換後顯示門票（`assets/101/ticket.jpg`，Nano Banana 2 生成；姓名、日期、六枚章由程式疊印）→「搭乘電梯上 89F」。
+- 電梯：鏡頭環繞 101 螺旋上升約 14 秒（2 圈以上），畫面顯示樓層 1F→89F、電梯音效；抵達「叮」一聲。
+- 89F 觀景台：鏡頭在 89 樓外圈，可拖曳環顧（不動時會慢慢自轉）；按鈕：「搭電梯回地面」（反向螺旋下降，回到兌換處前）、「🌙 夜間模式」（回地面後自動還原原本時段）、「🎆 施放煙火」→ 3、2、1 倒數 → 15 秒 3D 煙火（菊花、土星環、雙層、閃爍四種），**最後 3 秒粒子拼出「工務局」＋紅色愛心**。
+- 程式：`world.js` →「臺北101」區塊（`startRide / updateRide / updateDeck / startFireworks / textBurst`）；`ui.js` →「101 觀景台」區塊；音效 `audio.js`（elevator、ding、boom、whistle）。
+- 服務員立繪 `assets/npc/obs-1.jpg`（一般／`-happy`／`-worried`）均由 Nano Banana 2 生成。

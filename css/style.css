@@ -584,3 +584,68 @@ a.pp-g::after { content: '↗'; position: absolute; right: 12px; top: 10px; font
 .av-img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .avatar-seg button { padding-top: 5px; padding-bottom: 5px; }
 @media (max-width: 760px) { .view-pill { top: 172px; right: 14px; } .view-pill button { height: 36px; padding: 0 11px; font-size: 13px; } #btn-avatar { width: 36px; } }
+
+/* =====================================================================
+ * 101 觀景台：兌換、門票、電梯面板、觀景台介面、倒數
+ * ===================================================================== */
+.npc-actions { display: flex; gap: 8px; margin: 2px 0 6px; }
+.npc-actions[hidden] { display: none; }
+.npc-actions .btn { padding: 9px 18px; font-size: 14px; }
+.reward-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 10px; border-radius: 18px; background: #f3f5fb; border: 2px dashed #d5dbe8; }
+.reward-row.ready { background: linear-gradient(120deg, #fff6dc, #fff); border: 2px solid #f5cf6a; }
+.reward-row img { width: 96px; height: 48px; object-fit: cover; border-radius: 10px; box-shadow: var(--shadow); }
+.reward-row div { flex: 1; min-width: 0; } .reward-row b { display: block; font-size: 14px; } .reward-row small { color: var(--ink-2); font-weight: 700; font-size: 12px; }
+@media (max-width: 760px) { .reward-row { flex-wrap: wrap; } .reward-row .btn { width: 100%; } }
+
+#ticket { position: fixed; inset: 0; z-index: 74; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(20, 28, 58, .6); backdrop-filter: blur(6px); }
+#ticket[hidden] { display: none; }
+.ticket-wrap { display: flex; flex-direction: column; align-items: center; gap: 22px; width: min(720px, 100%); }
+.ticket-card { position: relative; width: 100%; aspect-ratio: 2 / 1; border-radius: 22px; overflow: hidden; box-shadow: 0 30px 70px rgba(0, 0, 0, .45); animation: tkin .8s cubic-bezier(.2, 1.3, .4, 1) both; }
+@keyframes tkin { 0% { transform: translateY(60px) rotate(-8deg) scale(.7); opacity: 0; } 100% { transform: rotate(-2deg); } }
+.ticket-card > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ticket-stub { position: absolute; right: 3.5%; top: 9%; bottom: 9%; width: 19%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #26355e; gap: 4px; }
+.ticket-stub small { font-family: var(--font-en); font-size: clamp(7px, 1.2vw, 10px); letter-spacing: .1em; font-weight: 800; }
+.ticket-stub b { font-family: var(--font-en); font-size: clamp(26px, 6vw, 46px); font-weight: 800; line-height: 1; color: #b0841f; }
+.ticket-stub span { font-size: clamp(10px, 1.7vw, 13px); font-weight: 800; }
+.ticket-stub em { font-style: normal; font-size: clamp(11px, 2vw, 16px); font-weight: 900; margin-top: 4px; }
+.ticket-stub time { font-family: var(--font-en); font-size: clamp(9px, 1.4vw, 11px); font-weight: 700; color: #6a7390; }
+.ticket-stamps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 6px; width: 80%; }
+.ticket-stamps i { display: block; aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--c); padding: 2px; background: #fff; transform: rotate(-8deg); }
+.ticket-stamps i svg { width: 100%; height: 100%; }
+.ticket-title { position: absolute; left: 4%; bottom: 7%; display: flex; flex-direction: column; color: #fff; text-shadow: 0 2px 8px rgba(30, 20, 70, .6); }
+.ticket-title span { font-size: clamp(11px, 2vw, 16px); font-weight: 800; } .ticket-title b { font-size: clamp(20px, 4.4vw, 36px); font-weight: 900; }
+
+#ride-ui { position: fixed; top: 86px; left: 50%; transform: translateX(-50%); z-index: 30; pointer-events: none; }
+#ride-ui[hidden], #deck-ui[hidden] { display: none; }
+.lift-panel { display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 14px; padding: 12px 22px; border-radius: 22px; color: #fff;
+  background: linear-gradient(160deg, rgba(38, 53, 94, .92), rgba(20, 28, 58, .92)); border: 2px solid #c9a65a; box-shadow: 0 16px 40px rgba(0, 0, 0, .35); }
+.lift-panel small { grid-column: 1 / -1; font-size: 12px; font-weight: 800; color: #f5cf6a; letter-spacing: .1em; }
+.lift-panel b { font-family: 'Outfit', monospace; font-size: 56px; font-weight: 800; line-height: 1; color: #ffd98a; text-shadow: 0 0 18px rgba(255, 200, 90, .6); min-width: 2.4ch; text-align: right; }
+.lift-panel b i { font-style: normal; font-size: 26px; margin-left: 2px; }
+.lift-arrow { font-size: 30px; color: #7cf0b0; animation: bob 1s infinite; }
+.lift-bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .15); overflow: hidden; margin-top: 6px; }
+.lift-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f5cf6a, #ff8fa3); }
+.lift-panel em { grid-column: 1 / -1; font-style: normal; font-size: 11px; color: rgba(255, 255, 255, .7); }
+
+#deck-ui { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+.deck-title { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); text-align: center; padding: 10px 26px; border-radius: 22px; color: #fff;
+  background: linear-gradient(160deg, rgba(38, 53, 94, .85), rgba(20, 28, 58, .85)); border: 2px solid #c9a65a; animation: rise .6s both; }
+.deck-title small { display: block; font-family: var(--font-en); font-size: 11px; letter-spacing: .14em; color: #f5cf6a; font-weight: 800; }
+.deck-title b { display: block; font-size: 26px; font-weight: 900; }
+.deck-title span { font-size: 12px; color: rgba(255, 255, 255, .8); }
+.deck-actions { position: absolute; left: 50%; bottom: calc(28px + var(--safe-b)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; pointer-events: auto;
+  padding: 10px; border-radius: 999px; background: rgba(255, 255, 255, .78); backdrop-filter: blur(14px); box-shadow: var(--shadow); }
+.deck-actions .btn[disabled] { opacity: .6; cursor: default; }
+.deck-night { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; font-weight: 800; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.deck-night input { width: 18px; height: 18px; accent-color: #26355e; }
+#countdown { position: fixed; inset: 0; z-index: 76; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+#countdown[hidden] { display: none; }
+#countdown b { font-family: var(--font-en); font-size: min(34vw, 260px); font-weight: 800; color: #fff; text-shadow: 0 0 40px rgba(255, 200, 90, .9), 0 10px 30px rgba(0, 0, 0, .4); }
+#countdown b.pop { animation: cdpop .9s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes cdpop { 0% { transform: scale(2.2); opacity: 0; } 30% { transform: scale(1); opacity: 1; } 100% { transform: scale(.85); opacity: 0; } }
+@media (max-width: 760px) {
+  #ride-ui, .deck-title { top: 64px; } .lift-panel b { font-size: 42px; } .deck-title b { font-size: 20px; }
+  .deck-actions { width: calc(100vw - 24px); flex-wrap: wrap; justify-content: center; border-radius: 22px; gap: 6px; }
+  .deck-actions .btn { padding: 10px 14px; font-size: 14px; }
+}
+#deck-ui.fw .deck-title { opacity: 0; transition: opacity .6s; }

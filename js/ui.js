@@ -39,7 +39,7 @@
       updateStampCount();
       buildTiles(); buildLabels(); bindKeys(); bindJoystick(); clock(); showFestival();
       World.on('zoneClick', id => { if (!started) return; World.mode === 'explore' ? openSheet(id) : select(id); });
-      World.on('proximity', onProximity); World.on('frame', onFrame); World.on('modeChange', onMode); World.on('npc', onNPC);
+      World.on('proximity', onProximity); World.on('frame', onFrame); World.on('modeChange', onMode); World.on('npc', onNPC); World.on('ride', onRide);
       clearInterval(iv); fill.style.width = '100%';
       setTimeout(() => $('#loader').classList.add('done'), 300);
       setTimeout(() => $('#loader').remove(), 1000);
@@ -249,6 +249,7 @@
       if (e.key === 'Escape') { if (!$('#tour').hidden) return endTour(); if (!$('#portal').hidden) return closePortal(); if (!$('#celebrate').hidden) return closeCelebrate(); ['menu', 'search', 'tasks', 'a11y', 'stamps'].forEach(close); closeSheet(); return; }
       if ([...document.querySelectorAll('.modal,#tour,#celebrate,#portal')].some(m => !m.hidden)) return;
       const onUI = e.target !== document.body && e.target.tagName !== 'CANVAS';
+      if (World.mode === 'ride' || World.mode === 'deck') return;
       if (World.mode === 'overview') {
         if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1);
         if (e.key === 'Enter' && !onUI) enterZone();
@@ -302,6 +303,7 @@
     [[16, -60], [44, -56], [66, -48], [76, -18], [74, 16], [66, 46], [38, 62], [0, 66], [-38, 62], [-72, 58], [-120, 64]].forEach((p, i) => { const [a, b] = P(...p); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke();
     x.strokeStyle = '#a7aec3'; x.lineWidth = 5 * sc; x.beginPath(); [[-22, 26], [-36, 44], [-42, 62], [-44, 82], [-48, 104]].forEach((p, i) => { const [a, b] = P(...p); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke();
     x.fillStyle = '#9fcf8a'; x.beginPath(); x.arc(...P(0, -96), 42 * sc, 0, 7); x.fill();
+    { const [a, b] = P(24, -4); x.fillStyle = '#26355e'; x.font = '800 10px Outfit, sans-serif'; x.textAlign = 'center'; x.fillText('101', a, b + 3); }
     ZONES.forEach(z => { const [a, b] = P(...z.pos); x.fillStyle = z.color; x.beginPath(); x.arc(a, b, z.id === 'hub' ? 7 : 6, 0, 7); x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 2; x.stroke(); });
     const pp = World.playerPos, yaw = World.playerYaw; const [px, py] = P(pp.x, pp.z);
     x.translate(px, py); x.rotate(-yaw); x.fillStyle = '#24304f'; x.beginPath(); x.moveTo(0, -9); x.lineTo(6, 6); x.lineTo(0, 3); x.lineTo(-6, 6); x.fill();
@@ -327,7 +329,13 @@
     const av = $('#npc-avatar'); av.hidden = false; av.alt = L.N(n, 'name'); setMood(n, 'happy');
     bub.style.setProperty('--c', (zone(n.zone) || {}).color || '#4a7fd4');
     bub.hidden = false;
-    const greet = L.N(n, 'greet'), gi = Math.random() * greet.length | 0; talk(greet[gi], n, L.lang === 'zh' ? `${n.id}-g${gi + 1}` : null);
+    const acts = $('#npc-actions'); acts.hidden = true; acts.innerHTML = '';
+    if (n.special === 'ticket') {
+      const left = ZONES.length - visited.size;
+      if (left <= 0) { talk(L.N(n, 'ready'), n, null); acts.innerHTML = `<button class="btn btn-primary" onclick="event.stopPropagation();UI.redeem()">${t('redeem')}</button>`; }
+      else { talk(L.N(n, 'notYet')(left), n, null); setMood(n, 'worried'); acts.innerHTML = `<button class="btn btn-glass" onclick="event.stopPropagation();UI.openStamps()">${t('passportBtn')}</button>`; }
+      acts.hidden = false;
+    } else { const greet = L.N(n, 'greet'), gi = Math.random() * greet.length | 0; talk(greet[gi], n, L.lang === 'zh' ? `${n.id}-g${gi + 1}` : null); }
     const p = $('#prompt'); $('#prompt-text').textContent = t('talk', L.N(n, 'name')); p.hidden = false; p.onclick = nextLine;
     track('npc_talk', { npc: id });
   }
@@ -338,7 +346,7 @@
   }
   function talk(line, n, key) {
     const text = typeof line === 'string' ? line : line.text, el = $('#npc-text');
-    setMood(n, moodOf(text)); World.npcTalk && World.npcTalk(n.id, Math.min(8, .9 + text.length * .11));
+    if (!(n.special && /還差|more/.test(text))) setMood(n, moodOf(text)); World.npcTalk && World.npcTalk(n.id, Math.min(8, .9 + text.length * .11));
     clearInterval(typing); let k = 0; el.textContent = '';
     if (document.body.classList.contains('reduce-motion')) el.textContent = text;
     else typing = setInterval(() => { el.textContent = text.slice(0, ++k); if (k >= text.length) clearInterval(typing); }, 38);
@@ -394,8 +402,7 @@
   function openStamps(justId) {
     $('#stamp-grid').innerHTML = ZONES.map((z, i) => stampHTML(z, i, visited.has(z.id), z.id === justId ? 'just' : '')).join('');
     $('#stamp-grid').querySelectorAll('.stamp').forEach((el, i) => el.onclick = () => { close('stamps'); goSearch(ZONES[i].id); });
-    $('#cert-row').hidden = visited.size < ZONES.length;
-    const nm = $('#cert-name'); nm.value = safeGet('pwd3d-name') || '';
+    $('#reward-sub').textContent = t('rewardSub', visited.size); $('#reward-row').classList.toggle('ready', visited.size >= ZONES.length);
     openModal('stamps'); track('stamps_open', { n: visited.size });
   }
   function stampPop(id) {
@@ -456,6 +463,51 @@
   }
   function roundRect(x, a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
 
+  /* ---------- 101 觀景台：兌換門票 → 螺旋電梯 → 89F 觀景台 → 煙火 ---------- */
+  function goBooth() {
+    const go = () => { World.teleport(24, 8, 0); toast(t('goto', '101')); };
+    if (!started) start('explore');
+    if (World.mode !== 'explore') { World.setMode('explore'); setTimeout(() => wipe('hub', go), 60); } else wipe('hub', go);
+  }
+  function redeem() {
+    if (visited.size < ZONES.length) return;
+    $('#ticket-name').textContent = safeGet('pwd3d-name') || t('explorer');
+    $('#ticket-date').textContent = new Date().toLocaleDateString(L.lang === 'zh' ? 'zh-TW' : 'en-US');
+    $('#ticket-stamps').innerHTML = ZONES.map(z => `<i style="--c:${z.color}">${EM[z.id]}</i>`).join('');
+    lastFocus = document.activeElement; $('#ticket').hidden = false; setTimeout(() => $('#ticket .btn').focus(), 60);
+    Sound.stamp && Sound.stamp(); Sound.fanfare && setTimeout(Sound.fanfare, 300); track('ticket_redeem');
+  }
+  let prevTime = null;
+  function boardElevator() { $('#ticket').hidden = true; World.startRide(1); }
+  function descend() { World.startRide(-1); }
+  function onRide(e) {
+    const hud = $('#explore-hud'), r = $('#ride-ui'), d = $('#deck-ui');
+    if (e.phase === 'up' || e.phase === 'down') {
+      hud.hidden = true; d.hidden = true; r.hidden = false; $('#npc-bubble').hidden = true; $('#prompt').hidden = true;
+      $('#lift-arrow').textContent = e.phase === 'up' ? '▲' : '▼'; Sound.elevator && Sound.elevator(true);
+    } else if (e.phase === 'progress') {
+      $('#lift-floor').textContent = e.floor; $('#lift-fill').style.width = (e.u * 100) + '%'; Sound.liftPitch && Sound.liftPitch(e.u);
+    } else if (e.phase === 'deck') {
+      r.hidden = true; d.hidden = false; Sound.elevator && Sound.elevator(false); Sound.ding && Sound.ding(); toast(t('arrived'));
+      $('#deck-night').checked = World.timeMode === 'night'; track('deck_arrive');
+    } else if (e.phase === 'ground') {
+      r.hidden = true; d.hidden = true; d.classList.remove('fw'); hud.hidden = false; Sound.elevator && Sound.elevator(false); Sound.ding && Sound.ding(); toast(t('backGround'));
+      if (prevTime !== null) { World.setTime(prevTime); prevTime = null; }
+      $('#btn-fw').disabled = false;
+    } else if (e.phase === 'fw-end') { $('#deck-ui').classList.remove('fw'); $('#btn-fw').disabled = false; $('#btn-fw span').textContent = t('fireworks'); }
+  }
+  function deckNight(on) {
+    if (on) { if (prevTime === null) prevTime = World.timeMode || 'auto'; World.setTime('night'); }
+    else { World.setTime(prevTime || 'auto'); prevTime = null; }
+  }
+  function fireworks() {
+    const b = $('#btn-fw'); if (b.disabled) return; b.disabled = true; b.querySelector('span').textContent = t('fwRunning');
+    const cd = $('#countdown'), num = $('#cd-num'); let n = 3; cd.hidden = false;
+    const tick = () => { if (n > 0) { num.textContent = n; num.classList.remove('pop'); void num.offsetWidth; num.classList.add('pop'); blip(500 + (3 - n) * 120); n--; setTimeout(tick, 1000); }
+      else { cd.hidden = true; World.startFireworks(); $('#deck-ui').classList.add('fw'); track('fireworks'); } };
+    tick();
+  }
+
   /* ---------- 第一／第三人稱、旅人角色 ---------- */
   function syncView() {
     const third = World.view === 'third', g = safeGet('pwd3d-avatar') || 'm';
@@ -472,7 +524,7 @@
   function openPortal(tab, arg) { if (!window.Portal) return; if ($('#portal').hidden) { lastFocus = document.activeElement; $('#portal-emblem').innerHTML = EM.hub; blip(600); } Portal.open(tab || 'home', arg); }
   function closePortal() { if (!window.Portal) return; Portal.close(); if (lastFocus && document.contains(lastFocus)) lastFocus.focus(); }
 
-  window.UI = { toggleView, toggleAvatar, openPortal, closePortal, portalFilter: q => Portal.filter(q), talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
+  window.UI = { goBooth, redeem, boardElevator, descend, deckNight, fireworks, toggleView, toggleAvatar, openPortal, closePortal, portalFilter: q => Portal.filter(q), talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
     share, openTasks, startTour, tourNext, endTour, toggleLang };
   boot();
 })();

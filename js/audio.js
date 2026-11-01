@@ -161,6 +161,32 @@
   function fanfare() { if (!ac || !on) return; const t = ac.currentTime + .05;
     [[523, 0], [659, .14], [784, .28], [1047, .42], [784, .62], [1047, .76]].forEach(([f, d]) => { note(f, t + d, .45, 'triangle', .07); note(f / 2, t + d, .45, 'sine', .04); }); }
 
+
+  /* ---------- 101 電梯／煙火音效 ---------- */
+  let lift = null;
+  function elevator(onOff) {
+    if (!ac || !on) return;
+    if (onOff && !lift) { const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+      o.type = 'sawtooth'; o.frequency.value = 55; o2.type = 'sine'; o2.frequency.value = 110; f.type = 'lowpass'; f.frequency.value = 260;
+      g.gain.value = 0; o.connect(f); o2.connect(f); f.connect(g).connect(master); o.start(); o2.start(); g.gain.setTargetAtTime(.05, ac.currentTime, .6);
+      lift = { o, o2, g, f, t0: ac.currentTime }; }
+    if (!onOff && lift) { const l = lift; lift = null; l.g.gain.setTargetAtTime(0, ac.currentTime, .3); setTimeout(() => { l.o.stop(); l.o2.stop(); }, 1200); }
+  }
+  function liftPitch(u) { if (lift) { lift.o.frequency.setTargetAtTime(55 + u * 30, ac.currentTime, .2); lift.f.frequency.setTargetAtTime(260 + u * 300, ac.currentTime, .2); } }
+  function ding() { if (!ac || !on) return; const t = ac.currentTime; note(1318, t, 1.2, 'sine', .08); note(1046, t + .28, 1.4, 'sine', .08); }
+  function noiseBurst(dur, freq, vol, t0) {
+    const b = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.5);
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); s.buffer = b; f.type = 'lowpass'; f.frequency.value = freq; g.gain.value = vol;
+    s.connect(f).connect(g).connect(master); s.start(t0);
+  }
+  function boom(dist = 60) { if (!ac || !on) return; const t = ac.currentTime + Math.min(.6, dist / 340), v = Math.min(.5, 18 / Math.max(10, dist));
+    noiseBurst(1.4, 420, v, t); noiseBurst(.25, 3000, v * .5, t);
+    for (let k = 0; k < 6; k++) noiseBurst(.06, 5000, v * .25, t + .35 + Math.random() * .7); }       // 劈啪聲
+  function whistle() { if (!ac || !on) return; const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime; o.type = 'sine';
+    o.frequency.setValueAtTime(900, t); o.frequency.exponentialRampToValueAtTime(2200, t + 1.1); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.025, t + .1); g.gain.exponentialRampToValueAtTime(.0001, t + 1.2);
+    o.connect(g).connect(master); o.start(t); o.stop(t + 1.25); }
+
   /* ---------- NPC 語音 ---------- */
   let voices = [], voiceOn = true, current = null;
   const loadVoices = () => { voices = ('speechSynthesis' in window) ? speechSynthesis.getVoices() : []; };
@@ -194,5 +220,5 @@
   }
   function stopVoice() { if (current) { current.pause(); current = null; } if ('speechSynthesis' in window) speechSynthesis.cancel(); }
 
-  window.Sound = { start, stop, blip, stinger, stamp, fanfare, say, stopVoice, get on() { return on; }, setVoice: v => { voiceOn = v; if (!v) stopVoice(); }, get voiceOn() { return voiceOn; } };
+  window.Sound = { start, stop, blip, stinger, stamp, fanfare, elevator, liftPitch, ding, boom, whistle, say, stopVoice, get on() { return on; }, setVoice: v => { voiceOn = v; if (!v) stopVoice(); }, get voiceOn() { return voiceOn; } };
 })();
