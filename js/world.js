@@ -1472,6 +1472,13 @@
     const pp = trail.getPointAt(.62), ph = hill(pp.x, pp.z);
     const deck = G(null, pp.x + 2.5, ph, pp.z + 1); deck.rotation.y = Math.atan2(24 - deck.position.x, -4 - deck.position.z);
     W.platform = deck.position.clone();
+    // 可站上平台：平台面高度＋入口斜坡（開口在 local -z 側），欄杆三面加碰撞
+    deck.updateMatrixWorld(true);
+    W.deckInfo = { inv: deck.matrixWorld.clone().invert(), top: ph + 1.075 };
+    [[-4.4, -2.9, -4.4, 2.9], [-4.4, 2.9, 4.4, 2.9], [4.4, 2.9, 4.4, -2.9]].forEach(([ax, az, bx, bz]) => {
+      const L = Math.hypot(bx - ax, bz - az); for (let k = 0; k <= L; k += .8) { const wp = deck.localToWorld(new V3(ax + (bx - ax) * k / L, 0, az + (bz - az) * k / L)); W.colliders.push({ x: wp.x, z: wp.z, r: .35 }); } });
+    // 入口木階梯
+    for (let i = 0; i < 4; i++) M(box(3, .25, .7), '#b08460', { x: 0, y: 1.0 - (i + 1) * .3, z: -3.25 - i * .6, parent: deck, ol: .02 });
     M(box(9, .35, 6), '#c99b77', { y: .9, parent: deck });
     for (let k = -4; k <= 4; k += 1) M(box(.06, .02, 6), '#b08460', { x: k, y: 1.08, parent: deck, ol: 0, cast: false });
     [[-4.3, -2.8], [4.3, -2.8], [-4.3, 2.8], [4.3, 2.8], [0, 2.8], [-2.2, 2.8], [2.2, 2.8]].forEach(([x, z]) => M(cyl(.12, .14, 3, 8), '#a8794f', { x, y: -.4, z, parent: deck, ol: .03 }));
@@ -2249,13 +2256,13 @@
       cam.pos.x = next.x; cam.pos.z = next.z;
       const speed = cam.vel.length();
       cam.bob = (cam.bob || 0) + dt * speed * .9;
-      cam.pos.y = 2.4 + (W.reduced ? 0 : Math.sin(cam.bob) * .08) * Math.min(1, speed / 8) + bridgeLift(cam.pos) + hill(cam.pos.x, cam.pos.z);
+      cam.pos.y = 2.4 + (W.reduced ? 0 : Math.sin(cam.bob) * .08) * Math.min(1, speed / 8) + standLift(cam.pos) + hill(cam.pos.x, cam.pos.z);
     }
     const look = new V3(-Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.cos(cam.yaw) * Math.cos(cam.pitch));
     const av = W.avatar;
     if (W.view === 'third' && av) {
       // 第三人稱：主角走在畫面中央，鏡頭在身後上方
-      const gy = hill(cam.pos.x, cam.pos.z) + bridgeLift(cam.pos);
+      const gy = hill(cam.pos.x, cam.pos.z) + standLift(cam.pos);
       av.visible = true; av.position.set(cam.pos.x, gy + .1, cam.pos.z);
       const sp = cam.vel.length();
       if (sp > .5) { const yaw = Math.atan2(cam.vel.x, cam.vel.z); av.rotation.y += (nearestAngle(av.rotation.y, yaw) - av.rotation.y) * Math.min(1, dt * 10); }
@@ -2279,6 +2286,18 @@
     if (npc !== W._npc) { W._npc = npc; const n = W.npcs.find(x => x.id === npc); if (n) n.wave = 2.2; W.listeners.npc.forEach(f => f(npc)); }
   }
   function nearSpur(p) { let b = null, bd = 1e9; for (const s of W.spurSamples) { const d = Math.hypot(s.x - p.x, s.z - p.z); if (d < bd) { bd = d; b = s; } } return { d: bd, t: b.t }; }
+  // 站在象山觀景平台上：平台範圍內抬到平台面；入口外 2.6m 為斜坡過渡
+  const _dl = new V3();
+  function deckLift(p) {
+    const D = W.deckInfo; if (!D) return 0;
+    _dl.set(p.x, 0, p.z).applyMatrix4(D.inv);
+    if (Math.abs(_dl.x) > 4.6) return 0;
+    const g = hill(p.x, p.z), up = Math.max(0, D.top - g);
+    if (_dl.z >= -3.0 && _dl.z <= 3.0) return up;
+    if (_dl.z < -3.0 && _dl.z > -5.6 && Math.abs(_dl.x) < 1.6) return up * (1 - (-3.0 - _dl.z) / 2.6);
+    return 0;
+  }
+  const standLift = p => bridgeLift(p) || deckLift(p);
   function bridgeLift(p) { const n = nearSpur(p); return n.d < 4.6 ? W.spurY(n.t) - .12 : 0; }
   function resolveCollision(p) {
     const r0 = Math.hypot(p.x, p.z); if (r0 > 104) { p.x *= 104 / r0; p.z *= 104 / r0; }
@@ -2546,7 +2565,7 @@
     riverDistance: (x, z) => nearRiver(x, z),
     get rollerPos() { return W.roller && W.roller.getWorldPosition(new V3()); },
     get godPos() { return W.godRider && W.godRider.position; }, get godYaw() { return W.godRider ? W.godRider.rotation.y : 0; },
-    get playgroundPos() { return W.playground; }, get fallPos() { return W.fallPos; },
+    get playgroundPos() { return W.playground; }, get fallPos() { return W.fallPos; }, get platformPos() { return W.platform; },
     debugCam: (p, l) => { W.mode = 'debug'; W.follow = null; viewShiftGoal = 0; W.camera.position.copy(p); W.camera.lookAt(l); },
     debugFollowBike: () => { W.mode = 'debug'; viewShiftGoal = 0; W.follow = W.bikes[0]; },
     setMoveInput: (x, y) => { W.move.x = x; W.move.y = y; },

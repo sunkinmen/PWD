@@ -526,8 +526,13 @@
   function toggleAvatar() { const g = (safeGet('pwd3d-avatar') || 'm') === 'm' ? 'f' : 'm'; setAvatar(g); blip(760); toast(t(g === 'm' ? 'avatarM' : 'avatarF')); }
 
   /* ---------- 工務局完整資訊（pwd-portal.js）---------- */
-  function openPortal(tab, arg) { if (!window.Portal) return; if ($('#portal').hidden) { lastFocus = document.activeElement; $('#portal-emblem').innerHTML = EM.hub; blip(600); } Portal.open(tab || 'home', arg); }
-  function closePortal() { if (!window.Portal) return; Portal.close(); if (lastFocus && document.contains(lastFocus)) lastFocus.focus(); }
+  // 開啟時推一筆瀏覽紀錄：手機按「返回」鍵或滑動返回也能關閉面板
+  function openPortal(tab, arg) { if (!window.Portal) return;
+    if ($('#portal').hidden) { lastFocus = document.activeElement; $('#portal-emblem').innerHTML = EM.hub; blip(600); try { history.pushState({ portal: 1 }, '', location.href); } catch (e) { } }
+    Portal.open(tab || 'home', arg); }
+  function closePortal(fromPop) { if (!window.Portal || $('#portal').hidden) return; Portal.close(); if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+    if (!fromPop && history.state && history.state.portal) { try { history.back(); } catch (e) { } } }
+  addEventListener('popstate', () => { if (!$('#portal').hidden) closePortal(true); });
 
   window.UI = { goBooth, redeem, boardElevator, descend, deckNight, fireworks, toggleView, toggleAvatar, openPortal, closePortal, portalFilter: q => Portal.filter(q), talkTo: id => onNPC(id), toggleHero, openStamps, downloadCert, closeCelebrate, celebrate, nextLine, start, select, enterZone, toggleMode, openSheet, closeSheet, openMenu, openSearch, goSearch, close, openA11y, showHelp, toggleSound,
     share, openTasks, startTour, tourNext, endTour, toggleLang };

@@ -649,3 +649,20 @@ a.pp-g::after { content: '↗'; position: absolute; right: 12px; top: 10px; font
   .deck-actions .btn { padding: 10px 14px; font-size: 14px; }
 }
 #deck-ui.fw .deck-title { opacity: 0; transition: opacity .6s; }
+
+/* ---------- 修正：桌機資訊卡換行不截斷；手機局網面板用實際可視高度（關閉鈕一定看得到） ---------- */
+@media (min-width: 761px) {
+  #hero .cards { flex-wrap: wrap; overflow: visible; }
+  #hero .card:not(.news) { flex: 1 1 0; min-width: 0; }
+  #hero .card.news { flex: 1 1 100%; min-width: 0; max-width: none; padding-top: 9px; padding-bottom: 9px; }
+  #hero .card.news span:not(.thumb) { -webkit-line-clamp: 1; max-height: 1.6em; }
+  #hero .card.news .thumb { width: 34px; height: 34px; }
+}
+.portal-card { height: min(880px, calc(94vh / var(--fs, 1))); height: min(880px, calc(94dvh / var(--fs, 1))); }
+.portal-head { position: sticky; top: 0; z-index: 2; }
+.portal-head .icon-btn { width: 44px; height: 44px; flex: 0 0 auto; }
+@media (max-width: 760px) {
+  #portal { align-items: stretch; padding: 0; }
+  .portal-card { height: calc(100vh / var(--fs, 1)); height: calc(100dvh / var(--fs, 1)); border-radius: 0; padding-top: env(safe-area-inset-top, 0px); }
+  .portal-head { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
+}
